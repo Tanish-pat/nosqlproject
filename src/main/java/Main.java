@@ -12,11 +12,6 @@ public class Main {
     public static void main(String[] args) throws Exception {
 
         Dotenv dotenv = Dotenv.load();
-        // Connection conn = DriverManager.getConnection(
-        //         "jdbc:mariadb://localhost:3306/nasa_analytics",
-        //         dotenv.get("MARIADB_USERNAME"),
-        //         dotenv.get("MARIADB_PASSWORD")
-        // );
         Connection conn = DriverManager.getConnection(
                 "jdbc:mysql://localhost:3306/nasa_analytics",
                 dotenv.get("MYSQL_USERNAME"),
@@ -28,7 +23,7 @@ public class Main {
         System.out.println("=========================================");
         System.out.println("1. Run Pipeline: MongoDB(DONE!!)");
         System.out.println("2. Run Pipeline: Apache Pig(DONE!!)");
-        System.out.println("3. Run Pipeline: Apache Hive(TESTING PENDING)");
+        System.out.println("3. Run Pipeline: Apache Hive(DONE!!)");
         System.out.println("4. Run Pipeline: MapReduce(DONE!!)");
         System.out.println("5. View Execution Report & Deep Insights(DONE!!)");
         System.out.print("Select an option (1-5): ");

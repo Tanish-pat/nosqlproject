@@ -7,10 +7,8 @@ public class ReportingModule {
 
     public static void main(String[] args) {
         Dotenv dotenv = Dotenv.load();
-        // String dbUrl = "jdbc:mariadb://localhost:3306/nasa_analytics";
         String dbUrl = "jdbc:mysql://localhost:3306/nasa_analytics";
 
-        // try (Connection conn = DriverManager.getConnection(dbUrl, dotenv.get("MARIADB_USERNAME"), dotenv.get("MARIADB_PASSWORD"))) {
         try (Connection conn = DriverManager.getConnection(dbUrl, dotenv.get("MYSQL_USERNAME"), dotenv.get("MYSQL_PASSWORD"))) {
             String latestRunId = getLatestRunId(conn);
             if (latestRunId == null) {
