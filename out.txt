@@ -13,11 +13,6 @@ public class Main {
     public static void main(String[] args) throws Exception {
 
         Dotenv dotenv = Dotenv.load();
-        // Connection conn = DriverManager.getConnection(
-        //         "jdbc:mariadb://localhost:3306/nasa_analytics",
-        //         dotenv.get("MARIADB_USERNAME"),
-        //         dotenv.get("MARIADB_PASSWORD")
-        // );
         Connection conn = DriverManager.getConnection(
                 "jdbc:mysql://localhost:3306/nasa_analytics",
                 dotenv.get("MYSQL_USERNAME"),
@@ -29,7 +24,7 @@ public class Main {
         System.out.println("=========================================");
         System.out.println("1. Run Pipeline: MongoDB(DONE!!)");
         System.out.println("2. Run Pipeline: Apache Pig(DONE!!)");
-        System.out.println("3. Run Pipeline: Apache Hive(TESTING PENDING)");
+        System.out.println("3. Run Pipeline: Apache Hive(DONE!!)");
         System.out.println("4. Run Pipeline: MapReduce(DONE!!)");
         System.out.println("5. View Execution Report & Deep Insights(DONE!!)");
         System.out.print("Select an option (1-5): ");
@@ -1031,12 +1026,8 @@ import com.nosql.parser.NasaLogRecord;
 import java.util.List;
 
 public interface Pipeline {
-    // Phase 1: Load the raw parsed data into the NoSQL backend
     void loadBatch(List<NasaLogRecord> batch, String runId, int batchId);
-    
-    // Phase 2: Execute Q1, Q2, Q3 using the NoSQL engine and save to MariaDB
     void executeQueries(String runId);
-
     String getPipelineName();
 }
 9) ./src/main/java/com/nosql/reporting/ReportingModule.java
@@ -1049,10 +1040,8 @@ public class ReportingModule {
 
     public static void main(String[] args) {
         Dotenv dotenv = Dotenv.load();
-        // String dbUrl = "jdbc:mariadb://localhost:3306/nasa_analytics";
         String dbUrl = "jdbc:mysql://localhost:3306/nasa_analytics";
 
-        // try (Connection conn = DriverManager.getConnection(dbUrl, dotenv.get("MARIADB_USERNAME"), dotenv.get("MARIADB_PASSWORD"))) {
         try (Connection conn = DriverManager.getConnection(dbUrl, dotenv.get("MYSQL_USERNAME"), dotenv.get("MYSQL_PASSWORD"))) {
             String latestRunId = getLatestRunId(conn);
             if (latestRunId == null) {

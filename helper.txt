@@ -29,3 +29,12 @@ mvn clean compile exec:java
 
 - docker help, permission to write to logs, should work then.
 sudo chown -R $USER:$USER /tmp/nasa_logs_hive
+
+
+work left:
+-> run on full dataset
+-> make readme
+-> make report
+-> record videos
+-> document outputs as screenshots for all pipelines
+-> viva at last
