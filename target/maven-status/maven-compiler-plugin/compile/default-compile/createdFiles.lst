@@ -1,6 +1,13 @@
-Main.class
+com/nosql/pipelines/MapReducePipeline$Q1Mapper.class
+com/nosql/pipelines/MapReducePipeline$Q2Mapper.class
+com/nosql/pipelines/MapReducePipeline$Q3Reducer.class
+com/nosql/pipelines/MapReducePipeline$Q1Reducer.class
+com/nosql/pipelines/MapReducePipeline.class
+com/nosql/pipelines/MapReducePipeline$Q3Mapper.class
 com/nosql/parser/LogParser.class
-com/nosql/pipelines/Pipeline.class
-com/nosql/pipelines/MongoPipeline.class
+com/nosql/pipelines/MapReducePipeline$Q2Reducer.class
+Main.class
 com/nosql/parser/NasaLogRecord.class
 com/nosql/reporting/ReportingModule.class
+com/nosql/pipelines/Pipeline.class
+com/nosql/pipelines/MongoPipeline.class

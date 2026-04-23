@@ -37,6 +37,8 @@ public class Main {
         Pipeline pipeline;
         if (choice == 1) {
             pipeline = new MongoPipeline(dotenv.get("MONGO_URI"), conn);
+        } else if (choice == 4) {
+            pipeline = new MapReducePipeline(conn); // Map Option 4!
         } else {
             System.out.println("❌ Pipeline not yet implemented. Exiting.");
             scanner.close();
