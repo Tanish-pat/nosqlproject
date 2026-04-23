@@ -1,0 +1,5 @@
+Main.class
+com/nosql/parser/LogParser.class
+com/nosql/pipelines/Pipeline.class
+com/nosql/pipelines/MongoPipeline.class
+com/nosql/parser/NasaLogRecord.class
