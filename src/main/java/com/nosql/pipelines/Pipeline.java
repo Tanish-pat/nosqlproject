@@ -9,6 +9,6 @@ public interface Pipeline {
     
     // Phase 2: Execute Q1, Q2, Q3 using the NoSQL engine and save to MariaDB
     void executeQueries(String runId);
-    
+
     String getPipelineName();
 }

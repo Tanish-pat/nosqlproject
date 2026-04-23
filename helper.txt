@@ -2,7 +2,7 @@
 select * from execution_metadata; select * from query_metrics; select * from q1_daily_traffic ORDER BY RAND()limit 10; select * from q2_top_resources ORDER BY RAND() limit 10; select * from q3_hourly_errors ORDER BY RAND() limit 10; 
 
 - clear tables in mariadb
-SET FOREIGN_KEY_CHECKS=0; TRUNCATE TABLE q1_daily_traffic; TRUNCATE TABLE q2_top_resources; TRUNCATE TABLE q3_hourly_errors; TRUNCATE TABLE execution_metadata; SET FOREIGN_KEY_CHECKS=1;
+SET FOREIGN_KEY_CHECKS=0; TRUNCATE TABLE q1_daily_traffic; TRUNCATE TABLE q2_top_resources; TRUNCATE TABLE q3_hourly_errors; TRUNCATE TABLE query_metrics; TRUNCATE TABLE execution_metadata; SET FOREIGN_KEY_CHECKS=1;
 
 
 - Log into mariadb using mariadb -u <your_user_name> -p (or mysql -u <your_user_name> -p), and run:

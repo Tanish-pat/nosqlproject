@@ -19,17 +19,19 @@ public class Main {
         );
 
         System.out.println("=========================================");
-        System.out.println("  NASA LOG ANALYTICS - PHASE 1 MENU ");
+        System.out.println("  NASA LOG ANALYTICS - FULL PIPELINE MENU ");
         System.out.println("=========================================");
-        System.out.println("1. Run Pipeline: MongoDB");
-        System.out.println("2. Run Pipeline: MapReduce");
-        System.out.println("3. View Execution Report & Deep Insights");
-        System.out.print("Select an option (1-3): ");
+        System.out.println("1. Run Pipeline: MongoDB(DONE!!)");
+        System.out.println("2. Run Pipeline: Apache Pig(TESTING PENDING)");
+        System.out.println("3. Run Pipeline: Apache Hive(TESTING PENDING)");
+        System.out.println("4. Run Pipeline: MapReduce(DONE!!)");
+        System.out.println("5. View Execution Report & Deep Insights(DONE!!)");
+        System.out.print("Select an option (1-5): ");
 
         try (Scanner scanner = new Scanner(System.in)) {
             int choice = scanner.nextInt();
 
-            if (choice == 3) {
+            if (choice == 5) {
                 ReportingModule.main(new String[]{});
                 return;
             }
@@ -38,14 +40,22 @@ public class Main {
             if (choice == 1) {
                 pipeline = new MongoPipeline(dotenv.get("MONGO_URI"), conn);
             } else if (choice == 2) {
+                pipeline = new PigPipeline(conn);
+            } else if (choice == 3) {
+                String hiveUri = dotenv.get("HIVE_URI") != null ? dotenv.get("HIVE_URI") : "jdbc:hive2://localhost:10000/default";
+                String hiveUser = dotenv.get("HIVE_USERNAME") != null ? dotenv.get("HIVE_USERNAME") : "";
+                String hivePass = dotenv.get("HIVE_PASSWORD") != null ? dotenv.get("HIVE_PASSWORD") : "";
+                pipeline = new HivePipeline(hiveUri, hiveUser, hivePass, conn);
+            } else if (choice == 4) {
                 pipeline = new MapReducePipeline(conn);
             } else {
                 System.out.println("❌ Invalid option. Exiting.");
+                scanner.close();
                 return;
             }
 
             String runId = "RUN_" + System.currentTimeMillis();
-            int batchSize = 10000;
+            int batchSize = 1000;
 
             // 1. Initialize Parent Metadata (NO query_name here anymore)
             PreparedStatement initMeta = conn.prepareStatement("INSERT INTO execution_metadata (run_id, pipeline_name, batch_size, runtime_ms) VALUES (?, ?, ?, ?)");
@@ -66,6 +76,7 @@ public class Main {
             int batchId = 1;
 
             // Use the sample file for rapid testing, but REMEMBER to change this for the final submission!
+            // String[] targetFiles = {"data/NASA_access_log_Aug95", "data/NASA_access_log_Jul95"};
             String[] targetFiles = {"data/NASA_access_log_sample"};
 
             System.out.println("--- PHASE 1: DATA INGESTION ---");

@@ -1,4 +1,4 @@
-]633;E;{ i=1\x3b for f in $(find . -type f -name "*.java")\x3b do echo "$((i++))) $f"\x3b cat "$f"\x3b echo\x3b done\x3b [ -f pom.xml ] && echo "$((i++))) pom.xml" && cat pom.xml\x3b } > out.txt;e833a096-7a39-41f2-8e82-6ae540ebcefc]633;C1) ./src/main/java/Main.java
+]633;E;{ i=1\x3b for f in $(find . -type f -name "*.java")\x3b do echo "$((i++))) $f"\x3b cat "$f"\x3b echo\x3b done\x3b [ -f pom.xml ] && echo "$((i++))) pom.xml" && cat pom.xml\x3b } > out.txt;b23f4771-d76c-45cf-97b8-662642953fe9]633;C1) ./src/main/java/Main.java
 import com.nosql.parser.LogParser;
 import com.nosql.parser.NasaLogRecord;
 import com.nosql.pipelines.*;
@@ -20,17 +20,19 @@ public class Main {
         );
 
         System.out.println("=========================================");
-        System.out.println("  NASA LOG ANALYTICS - PHASE 1 MENU ");
+        System.out.println("  NASA LOG ANALYTICS - FULL PIPELINE MENU ");
         System.out.println("=========================================");
-        System.out.println("1. Run Pipeline: MongoDB");
-        System.out.println("2. Run Pipeline: MapReduce");
-        System.out.println("3. View Execution Report & Deep Insights");
-        System.out.print("Select an option (1-3): ");
+        System.out.println("1. Run Pipeline: MongoDB(DONE!!)");
+        System.out.println("2. Run Pipeline: Apache Pig(TESTING PENDING)");
+        System.out.println("3. Run Pipeline: Apache Hive(TESTING PENDING)");
+        System.out.println("4. Run Pipeline: MapReduce(DONE!!)");
+        System.out.println("5. View Execution Report & Deep Insights(DONE!!)");
+        System.out.print("Select an option (1-5): ");
 
         try (Scanner scanner = new Scanner(System.in)) {
             int choice = scanner.nextInt();
 
-            if (choice == 3) {
+            if (choice == 5) {
                 ReportingModule.main(new String[]{});
                 return;
             }
@@ -39,14 +41,22 @@ public class Main {
             if (choice == 1) {
                 pipeline = new MongoPipeline(dotenv.get("MONGO_URI"), conn);
             } else if (choice == 2) {
+                pipeline = new PigPipeline(conn);
+            } else if (choice == 3) {
+                String hiveUri = dotenv.get("HIVE_URI") != null ? dotenv.get("HIVE_URI") : "jdbc:hive2://localhost:10000/default";
+                String hiveUser = dotenv.get("HIVE_USERNAME") != null ? dotenv.get("HIVE_USERNAME") : "";
+                String hivePass = dotenv.get("HIVE_PASSWORD") != null ? dotenv.get("HIVE_PASSWORD") : "";
+                pipeline = new HivePipeline(hiveUri, hiveUser, hivePass, conn);
+            } else if (choice == 4) {
                 pipeline = new MapReducePipeline(conn);
             } else {
                 System.out.println("❌ Invalid option. Exiting.");
+                scanner.close();
                 return;
             }
 
             String runId = "RUN_" + System.currentTimeMillis();
-            int batchSize = 10000;
+            int batchSize = 1000;
 
             // 1. Initialize Parent Metadata (NO query_name here anymore)
             PreparedStatement initMeta = conn.prepareStatement("INSERT INTO execution_metadata (run_id, pipeline_name, batch_size, runtime_ms) VALUES (?, ?, ?, ?)");
@@ -67,6 +77,7 @@ public class Main {
             int batchId = 1;
 
             // Use the sample file for rapid testing, but REMEMBER to change this for the final submission!
+            // String[] targetFiles = {"data/NASA_access_log_Aug95", "data/NASA_access_log_Jul95"};
             String[] targetFiles = {"data/NASA_access_log_sample"};
 
             System.out.println("--- PHASE 1: DATA INGESTION ---");
@@ -243,15 +254,35 @@ public class HivePipeline implements Pipeline {
             Class.forName("org.apache.hive.jdbc.HiveDriver");
             try (Connection hiveConn = DriverManager.getConnection(hiveUri, hiveUser, hivePass)) {
                 setupHiveTable(hiveConn, runId);
+
+                long t1 = System.currentTimeMillis();
                 runQuery1(hiveConn, runId);
+                recordQueryMetric(runId, "Q1: Daily Traffic", System.currentTimeMillis() - t1);
+
+                long t2 = System.currentTimeMillis();
                 runQuery2(hiveConn, runId);
+                recordQueryMetric(runId, "Q2: Top Resources", System.currentTimeMillis() - t2);
+
+                long t3 = System.currentTimeMillis();
                 runQuery3(hiveConn, runId);
+                recordQueryMetric(runId, "Q3: Hourly Errors", System.currentTimeMillis() - t3);
+
                 cleanupHiveTable(hiveConn, runId);
             }
         } catch (Exception e) { 
             e.printStackTrace(); 
             System.err.println("❌ Ensure HiveServer2 is running and accessible at " + hiveUri);
         }
+    }
+
+    private void recordQueryMetric(String runId, String queryName, long duration) {
+        String sql = "INSERT INTO query_metrics (run_id, query_name, runtime_ms) VALUES (?, ?, ?)";
+        try (PreparedStatement ps = mysqlConn.prepareStatement(sql)) {
+            ps.setString(1, runId);
+            ps.setString(2, queryName);
+            ps.setLong(3, duration);
+            ps.executeUpdate();
+        } catch (SQLException e) { e.printStackTrace(); }
     }
 
     private void setupHiveTable(Connection hiveConn, String runId) throws SQLException {
@@ -377,7 +408,6 @@ public class PigPipeline implements Pipeline {
             File file = new File(dir, "batch_" + batchId + ".tsv");
             try (BufferedWriter bw = new BufferedWriter(new FileWriter(file))) {
                 for (NasaLogRecord r : batch) {
-                    // Pig reads TSV files identically to MapReduce and Hive
                     String line = String.format("%s\t%s\t%s\t%s\t%d\t%d\n", 
                         r.host, r.logDate, r.logHour, r.resourcePath, r.statusCode, r.bytesTransferred);
                     bw.write(line);
@@ -390,56 +420,73 @@ public class PigPipeline implements Pipeline {
     public void executeQueries(String runId) {
         try {
             System.out.println("   -> Starting Apache Pig (Local Mode)...");
-            
-            // Execute Pig in local mode (no Hadoop cluster required)
             PigServer pigServer = new PigServer("local");
-
             String inputDir = baseDir + runId + "/input/";
-            String q1Out = baseDir + runId + "/q1_out";
-            String q2Out = baseDir + runId + "/q2_out";
-            String q3Out = baseDir + runId + "/q3_out";
 
-            // 0. Load Data into Pig
+            // Load Data into Pig Context
             pigServer.registerQuery("raw = LOAD 'file://" + inputDir + "' USING PigStorage('\\t') " +
                 "AS (host:chararray, log_date:chararray, log_hour:chararray, resource_path:chararray, status_code:int, bytes:long);");
 
-            // 1. Query 1: Daily Traffic Summary
-            System.out.println("   -> Executing Pig Job: Query 1 (Daily Traffic)...");
-            pigServer.registerQuery("q1_grp = GROUP raw BY (log_date, status_code);");
-            pigServer.registerQuery("q1_out = FOREACH q1_grp GENERATE FLATTEN(group) AS (log_date, status_code), " +
-                "COUNT(raw) AS req_count, SUM(raw.bytes) AS total_bytes;");
-            pigServer.store("q1_out", "file://" + q1Out, "PigStorage('\\t')");
+            long t1 = System.currentTimeMillis();
+            runQuery1(pigServer, runId);
+            recordQueryMetric(runId, "Q1: Daily Traffic", System.currentTimeMillis() - t1);
 
-            // 2. Query 2: Top Requested Resources
-            System.out.println("   -> Executing Pig Job: Query 2 (Top Resources)...");
-            pigServer.registerQuery("q2_grp = GROUP raw BY resource_path;");
-            pigServer.registerQuery("q2_agg = FOREACH q2_grp { " +
-                "unique_hosts = DISTINCT raw.host; " +
-                "GENERATE group AS resource_path, COUNT(raw) AS req_count, SUM(raw.bytes) AS total_bytes, COUNT(unique_hosts) AS distinct_host_count; };");
-            pigServer.registerQuery("q2_sorted = ORDER q2_agg BY req_count DESC;");
-            pigServer.registerQuery("q2_limit = LIMIT q2_sorted 20;");
-            pigServer.store("q2_limit", "file://" + q2Out, "PigStorage('\\t')");
+            long t2 = System.currentTimeMillis();
+            runQuery2(pigServer, runId);
+            recordQueryMetric(runId, "Q2: Top Resources", System.currentTimeMillis() - t2);
 
-            // 3. Query 3: Hourly Error Analysis
-            System.out.println("   -> Executing Pig Job: Query 3 (Hourly Errors)...");
-            pigServer.registerQuery("q3_grp = GROUP raw BY (log_date, log_hour);");
-            pigServer.registerQuery("q3_agg = FOREACH q3_grp { " +
-                "errors = FILTER raw BY (status_code >= 400 AND status_code <= 599); " +
-                "unique_err_hosts = DISTINCT errors.host; " +
-                "GENERATE FLATTEN(group) AS (log_date, log_hour), " +
-                "COUNT(errors) AS error_request_count, COUNT(raw) AS total_request_count, " +
-                "((float)COUNT(errors) / (float)COUNT(raw)) AS error_rate, COUNT(unique_err_hosts) AS distinct_error_hosts; };");
-            pigServer.store("q3_agg", "file://" + q3Out, "PigStorage('\\t')");
+            long t3 = System.currentTimeMillis();
+            runQuery3(pigServer, runId);
+            recordQueryMetric(runId, "Q3: Hourly Errors", System.currentTimeMillis() - t3);
 
-            // Load results back into MariaDB
-            System.out.println("   -> Loading Pig results into MariaDB...");
-            loadQ1ToDB(q1Out, runId);
-            loadQ2ToDB(q2Out, runId);
-            loadQ3ToDB(q3Out, runId);
+        } catch (Exception e) { e.printStackTrace(); }
+    }
 
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+    private void recordQueryMetric(String runId, String queryName, long duration) {
+        String sql = "INSERT INTO query_metrics (run_id, query_name, runtime_ms) VALUES (?, ?, ?)";
+        try (PreparedStatement ps = mysqlConn.prepareStatement(sql)) {
+            ps.setString(1, runId);
+            ps.setString(2, queryName);
+            ps.setLong(3, duration);
+            ps.executeUpdate();
+        } catch (SQLException e) { e.printStackTrace(); }
+    }
+
+    private void runQuery1(PigServer pigServer, String runId) throws Exception {
+        System.out.println("   -> Executing Pig Job: Query 1 (Daily Traffic)...");
+        String q1Out = baseDir + runId + "/q1_out";
+        pigServer.registerQuery("q1_grp = GROUP raw BY (log_date, status_code);");
+        pigServer.registerQuery("q1_out = FOREACH q1_grp GENERATE FLATTEN(group) AS (log_date, status_code), " +
+            "COUNT(raw) AS req_count, SUM(raw.bytes) AS total_bytes;");
+        pigServer.store("q1_out", "file://" + q1Out, "PigStorage('\\t')");
+        loadQ1ToDB(q1Out, runId);
+    }
+
+    private void runQuery2(PigServer pigServer, String runId) throws Exception {
+        System.out.println("   -> Executing Pig Job: Query 2 (Top Resources)...");
+        String q2Out = baseDir + runId + "/q2_out";
+        pigServer.registerQuery("q2_grp = GROUP raw BY resource_path;");
+        pigServer.registerQuery("q2_agg = FOREACH q2_grp { " +
+            "unique_hosts = DISTINCT raw.host; " +
+            "GENERATE group AS resource_path, COUNT(raw) AS req_count, SUM(raw.bytes) AS total_bytes, COUNT(unique_hosts) AS distinct_host_count; };");
+        pigServer.registerQuery("q2_sorted = ORDER q2_agg BY req_count DESC;");
+        pigServer.registerQuery("q2_limit = LIMIT q2_sorted 20;");
+        pigServer.store("q2_limit", "file://" + q2Out, "PigStorage('\\t')");
+        loadQ2ToDB(q2Out, runId);
+    }
+
+    private void runQuery3(PigServer pigServer, String runId) throws Exception {
+        System.out.println("   -> Executing Pig Job: Query 3 (Hourly Errors)...");
+        String q3Out = baseDir + runId + "/q3_out";
+        pigServer.registerQuery("q3_grp = GROUP raw BY (log_date, log_hour);");
+        pigServer.registerQuery("q3_agg = FOREACH q3_grp { " +
+            "errors = FILTER raw BY (status_code >= 400 AND status_code <= 599); " +
+            "unique_err_hosts = DISTINCT errors.host; " +
+            "GENERATE FLATTEN(group) AS (log_date, log_hour), " +
+            "COUNT(errors) AS error_request_count, COUNT(raw) AS total_request_count, " +
+            "((float)COUNT(errors) / (float)COUNT(raw)) AS error_rate, COUNT(unique_err_hosts) AS distinct_error_hosts; };");
+        pigServer.store("q3_agg", "file://" + q3Out, "PigStorage('\\t')");
+        loadQ3ToDB(q3Out, runId);
     }
 
     private void loadQ1ToDB(String outDir, String runId) throws Exception {
@@ -984,7 +1031,7 @@ public interface Pipeline {
     
     // Phase 2: Execute Q1, Q2, Q3 using the NoSQL engine and save to MariaDB
     void executeQueries(String runId);
-    
+
     String getPipelineName();
 }
 9) ./src/main/java/com/nosql/reporting/ReportingModule.java

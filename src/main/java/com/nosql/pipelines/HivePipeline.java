@@ -46,15 +46,35 @@ public class HivePipeline implements Pipeline {
             Class.forName("org.apache.hive.jdbc.HiveDriver");
             try (Connection hiveConn = DriverManager.getConnection(hiveUri, hiveUser, hivePass)) {
                 setupHiveTable(hiveConn, runId);
+
+                long t1 = System.currentTimeMillis();
                 runQuery1(hiveConn, runId);
+                recordQueryMetric(runId, "Q1: Daily Traffic", System.currentTimeMillis() - t1);
+
+                long t2 = System.currentTimeMillis();
                 runQuery2(hiveConn, runId);
+                recordQueryMetric(runId, "Q2: Top Resources", System.currentTimeMillis() - t2);
+
+                long t3 = System.currentTimeMillis();
                 runQuery3(hiveConn, runId);
+                recordQueryMetric(runId, "Q3: Hourly Errors", System.currentTimeMillis() - t3);
+
                 cleanupHiveTable(hiveConn, runId);
             }
         } catch (Exception e) { 
             e.printStackTrace(); 
             System.err.println("❌ Ensure HiveServer2 is running and accessible at " + hiveUri);
         }
+    }
+
+    private void recordQueryMetric(String runId, String queryName, long duration) {
+        String sql = "INSERT INTO query_metrics (run_id, query_name, runtime_ms) VALUES (?, ?, ?)";
+        try (PreparedStatement ps = mysqlConn.prepareStatement(sql)) {
+            ps.setString(1, runId);
+            ps.setString(2, queryName);
+            ps.setLong(3, duration);
+            ps.executeUpdate();
+        } catch (SQLException e) { e.printStackTrace(); }
     }
 
     private void setupHiveTable(Connection hiveConn, String runId) throws SQLException {
