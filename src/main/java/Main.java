@@ -22,7 +22,7 @@ public class Main {
         System.out.println("  NASA LOG ANALYTICS - FULL PIPELINE MENU ");
         System.out.println("=========================================");
         System.out.println("1. Run Pipeline: MongoDB(DONE!!)");
-        System.out.println("2. Run Pipeline: Apache Pig(TESTING PENDING)");
+        System.out.println("2. Run Pipeline: Apache Pig(DONE!!)");
         System.out.println("3. Run Pipeline: Apache Hive(TESTING PENDING)");
         System.out.println("4. Run Pipeline: MapReduce(DONE!!)");
         System.out.println("5. View Execution Report & Deep Insights(DONE!!)");

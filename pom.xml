@@ -56,6 +56,11 @@
             <artifactId>pig</artifactId>
             <version>0.17.0</version>
         </dependency>
+        <dependency>
+            <groupId>org.python</groupId>
+            <artifactId>jython-standalone</artifactId>
+            <version>2.7.2</version>
+        </dependency>
     </dependencies>
 
     <build>

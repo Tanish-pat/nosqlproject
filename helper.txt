@@ -4,12 +4,14 @@ select * from execution_metadata; select * from query_metrics; select * from q1_
 - clear tables in mariadb
 SET FOREIGN_KEY_CHECKS=0; TRUNCATE TABLE q1_daily_traffic; TRUNCATE TABLE q2_top_resources; TRUNCATE TABLE q3_hourly_errors; TRUNCATE TABLE query_metrics; TRUNCATE TABLE execution_metadata; SET FOREIGN_KEY_CHECKS=1;
 
+- dump the saved nasa_analytics tables and schema and all into an sql file that can be ported to your system safely
+mariadb-dump -u <your_user_name> -p nasa_analytics > data/nasa_analytics.sql
 
 - Log into mariadb using mariadb -u <your_user_name> -p (or mysql -u <your_user_name> -p), and run:
 1. CREATE DATABASE nasa_analytics;
 2. exit;
 then after coming out:
-mariadb -u <your_user_name> -p nasa_analytics < nasa_analytics.sql
+mariadb -u <your_user_name> -p nasa_analytics < data/nasa_analytics.sql
 
 
 - flush mongodb collections for mongodb pipeline

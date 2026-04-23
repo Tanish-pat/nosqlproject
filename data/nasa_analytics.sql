@@ -17,14 +17,6 @@
 /*M!100616 SET @OLD_NOTE_VERBOSITY=@@NOTE_VERBOSITY, NOTE_VERBOSITY=0 */;
 
 --
--- Current Database: `nasa_analytics`
---
-
-CREATE DATABASE /*!32312 IF NOT EXISTS*/ `nasa_analytics` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci */;
-
-USE `nasa_analytics`;
-
---
 -- Table structure for table `execution_metadata`
 --
 
@@ -34,7 +26,6 @@ DROP TABLE IF EXISTS `execution_metadata`;
 CREATE TABLE `execution_metadata` (
   `run_id` varchar(50) NOT NULL,
   `pipeline_name` varchar(20) DEFAULT NULL,
-  `query_name` varchar(50) DEFAULT NULL,
   `batch_id` int(11) DEFAULT NULL,
   `batch_size` int(11) DEFAULT NULL,
   `avg_batch_size` float DEFAULT NULL,
@@ -51,8 +42,6 @@ CREATE TABLE `execution_metadata` (
 SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
 LOCK TABLES `execution_metadata` WRITE;
 /*!40000 ALTER TABLE `execution_metadata` DISABLE KEYS */;
-INSERT INTO `execution_metadata` VALUES
-('RUN_1776922626196','Hive',NULL,1,10000,10000,169,'2026-04-23 05:37:06');
 /*!40000 ALTER TABLE `execution_metadata` ENABLE KEYS */;
 UNLOCK TABLES;
 COMMIT;
@@ -151,12 +140,32 @@ COMMIT;
 SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
 
 --
--- Dumping events for database 'nasa_analytics'
+-- Table structure for table `query_metrics`
 --
 
+DROP TABLE IF EXISTS `query_metrics`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `query_metrics` (
+  `run_id` varchar(50) DEFAULT NULL,
+  `query_name` varchar(100) DEFAULT NULL,
+  `runtime_ms` bigint(20) DEFAULT NULL,
+  KEY `run_id` (`run_id`),
+  CONSTRAINT `1` FOREIGN KEY (`run_id`) REFERENCES `execution_metadata` (`run_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
 --
--- Dumping routines for database 'nasa_analytics'
+-- Dumping data for table `query_metrics`
 --
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `query_metrics` WRITE;
+/*!40000 ALTER TABLE `query_metrics` DISABLE KEYS */;
+/*!40000 ALTER TABLE `query_metrics` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
@@ -167,4 +176,4 @@ SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;
 
--- Dump completed on 2026-04-23 18:23:20
+-- Dump completed on 2026-04-24  2:43:18
