@@ -50,16 +50,29 @@ public class ReportingModule {
                     System.out.println("\n[ EXECUTION METADATA ]");
                     System.out.println("Run ID           : " + rs.getString("run_id"));
                     System.out.println("Pipeline Used    : " + rs.getString("pipeline_name"));
-                    System.out.println("Queries Executed : " + rs.getString("query_name")); // Pulled natively from DB
                     System.out.println("Execution Time   : " + rs.getTimestamp("execution_time"));
                     System.out.println("Total Runtime    : " + rs.getLong("runtime_ms") + " ms");
                     System.out.println("Total Batches    : " + rs.getInt("batch_id"));
                     System.out.printf("Avg Batch Size   : %.2f\n", rs.getFloat("avg_batch_size"));
+                    displayGranularQueryMetrics(conn, runId);
                 }
             }
         }
     }
 
+    private static void displayGranularQueryMetrics(Connection conn, String runId) throws SQLException {
+        System.out.println("\n  --- Granular Query Telemetry ---");
+        String sql = "SELECT query_name, runtime_ms FROM query_metrics WHERE run_id = ? ORDER BY query_name ASC";
+        try (PreparedStatement ps = prepareStatement(conn, sql, runId); ResultSet rs = ps.executeQuery()) {
+            boolean hasData = false;
+            while(rs.next()) {
+                hasData = true;
+                System.out.printf("  * %-20s : %d ms\n", rs.getString("query_name"), rs.getLong("runtime_ms"));
+            }
+            if(!hasData) System.out.println("  * No query telemetry recorded for this run.");
+        }
+    }
+    
     private static void displayQuery1Results(Connection conn, String runId) throws SQLException {
         String query = "SELECT log_date, status_code, request_count, total_bytes FROM q1_daily_traffic WHERE run_id = ? ORDER BY log_date ASC, status_code ASC LIMIT 10";
         try (PreparedStatement ps = conn.prepareStatement(query)) {

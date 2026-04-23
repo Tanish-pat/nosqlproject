@@ -31,13 +31,32 @@ public class MongoPipeline implements Pipeline {
 
     @Override
     public void executeQueries(String runId) {
-        MongoCollection<Document> collection = mongoClient.getDatabase("nasa_logs").getCollection("raw_batch_" + runId);
-        
-        runQuery1(collection, runId);
-        runQuery2(collection, runId);
-        runQuery3(collection, runId); // Added Query 3
+        try {
+            MongoCollection<Document> collection = mongoClient.getDatabase("nasa_logs").getCollection("raw_batch_" + runId);
+            long t1 = System.currentTimeMillis();
+            runQuery1(collection, runId);
+            recordQueryMetric(runId, "Q1: Daily Traffic", System.currentTimeMillis() - t1);
+            
+            long t2 = System.currentTimeMillis();
+            runQuery2(collection, runId);
+            recordQueryMetric(runId, "Q2: Top Resources", System.currentTimeMillis() - t2);
+            
+            long t3 = System.currentTimeMillis();
+            runQuery3(collection, runId);
+            recordQueryMetric(runId, "Q3: Hourly Errors", System.currentTimeMillis() - t3);
+        } catch (Exception e) { e.printStackTrace(); }
     }
-
+    
+    private void recordQueryMetric(String runId, String queryName, long duration) {
+        String sql = "INSERT INTO query_metrics (run_id, query_name, runtime_ms) VALUES (?, ?, ?)";
+        try (PreparedStatement ps = mysqlConn.prepareStatement(sql)) {
+            ps.setString(1, runId);
+            ps.setString(2, queryName);
+            ps.setLong(3, duration);
+            ps.executeUpdate();
+        } catch (SQLException e) { e.printStackTrace(); }
+    }
+    
     private void runQuery1(MongoCollection<Document> collection, String runId) {
         System.out.println("   -> Executing Query 1 (Daily Traffic)...");
         List<Document> pipeline = Arrays.asList(
