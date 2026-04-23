@@ -4,6 +4,7 @@ com/nosql/pipelines/MapReducePipeline$Q3Reducer.class
 com/nosql/pipelines/MapReducePipeline$Q1Reducer.class
 com/nosql/pipelines/MapReducePipeline.class
 com/nosql/pipelines/MapReducePipeline$Q3Mapper.class
+com/nosql/pipelines/PigPipeline.class
 com/nosql/parser/LogParser.class
 com/nosql/pipelines/MapReducePipeline$Q2Reducer.class
 Main.class

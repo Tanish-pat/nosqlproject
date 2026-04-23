@@ -1,17 +1,27 @@
-clear tables in mariadb
+- quickly see all tables:
+select * from execution_metadata ORDER BY RAND(); select * from q1_daily_traffic ORDER BY RAND()limit 10; select * from q2_top_resources ORDER BY RAND() limit 10; select * from q3_hourly_errors ORDER BY RAND() limit 10; 
+
+- clear tables in mariadb
 SET FOREIGN_KEY_CHECKS=0; TRUNCATE TABLE q1_daily_traffic; TRUNCATE TABLE q2_top_resources; TRUNCATE TABLE q3_hourly_errors; TRUNCATE TABLE execution_metadata; SET FOREIGN_KEY_CHECKS=1;
 
 
-Log into mariadb using mariadb -u <your_user_name> -p (or mysql -u <your_user_name> -p), and run:
+- Log into mariadb using mariadb -u <your_user_name> -p (or mysql -u <your_user_name> -p), and run:
 1. CREATE DATABASE nasa_analytics;
 2. exit;
 then after coming out:
 mariadb -u <your_user_name> -p nasa_analytics < nasa_analytics.sql
 
 
-flush mongodb collections for mongodb pipeline
+- flush mongodb collections for mongodb pipeline
 mongosh "mongodb+srv://cluster0.aeqqw2q.mongodb.net/" --username tanishpathania_db_user --eval "db.getSiblingDB('nasa_logs').dropDatabase()"
 then password : 5hzN0CqzL3xW3ijl
 
-to print out all the java files with relative path and then pom.xml at the end
+- to print out all the java files with relative path and then pom.xml at the end:
 i=1; for f in $(find . -type f -name "*.java"); do echo "$((i++))) $f"; cat "$f"; echo; done; [ -f pom.xml ] && echo "$((i++))) pom.xml" && cat pom.xml
+
+- to print out all the java files with relative path and then pom.xml at the end and write to out.txt file:
+{ i=1; for f in $(find . -type f -name "*.java"); do echo "$((i++))) $f"; cat "$f"; echo; done; [ -f pom.xml ] && echo "$((i++))) pom.xml" && cat pom.xml; } > out.txt
+
+- to run the program, type this:
+mvn clean compile exec:java
+

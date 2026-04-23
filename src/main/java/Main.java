@@ -21,11 +21,11 @@ public class Main {
         System.out.println("=========================================");
         System.out.println("  NASA LOG ANALYTICS - MAIN MENU ");
         System.out.println("=========================================");
-        System.out.println("1. Run Pipeline: MongoDB");
+        System.out.println("1. Run Pipeline: MongoDB (DONE!!)");
         System.out.println("2. Run Pipeline: Pig (Pending Phase 2)");
-        System.out.println("3. Run Pipeline: Hive");
-        System.out.println("4. Run Pipeline: MapReduce");
-        System.out.println("5. View Latest Execution Report");
+        System.out.println("3. Run Pipeline: Hive (Pending Phase 2)");
+        System.out.println("4. Run Pipeline: MapReduce (DONE!!)");
+        System.out.println("5. View Latest Execution Report (DONE!!)");
         System.out.print("Select an option (1-5): ");
 
         try (Scanner scanner = new Scanner(System.in)) {
@@ -44,7 +44,7 @@ public class Main {
                 pipeline = new MongoPipeline(dotenv.get("MONGO_URI"), conn);
 
             } else if (choice == 2) {
-                pipeline = new PigPipeline(conn); // Map Option 2 to Apache Pig!
+                pipeline = new PigPipeline(conn); 
 
             } else if (choice == 3) {
                 String hiveUri = dotenv.get("HIVE_URI");
@@ -66,17 +66,17 @@ public class Main {
             }
 
             String runId = "RUN_" + System.currentTimeMillis();
-            int batchSize = 10000;
+            int batchSize = 1000;
 
             // Initialize Metadata
             PreparedStatement initMeta = conn.prepareStatement(
-                    "INSERT INTO execution_metadata (run_id, pipeline_name, batch_size, runtime_ms) VALUES (?, ?, ?, ?)");
+                    "INSERT INTO execution_metadata (run_id, pipeline_name, batch_size, runtime_ms, query_name) VALUES (?, ?, ?, ?, ?)");
             initMeta.setString(1, runId);
             initMeta.setString(2, pipeline.getPipelineName());
             initMeta.setInt(3, batchSize);
             initMeta.setLong(4, 0);
+            initMeta.setString(5, "Q1: Daily Traffic, Q2: Top Resources, Q3: Hourly Errors"); // Explicit Audit Trail
             initMeta.executeUpdate();
-
             System.out.println("\n🚀 Starting ETL Pipeline: " + runId + " via " + pipeline.getPipelineName());
             long startTime = System.currentTimeMillis();
 
