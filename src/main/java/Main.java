@@ -1,7 +1,7 @@
 import com.nosql.parser.LogParser;
 import com.nosql.parser.NasaLogRecord;
-import com.nosql.pipelines.MongoPipeline;
-import com.nosql.pipelines.Pipeline;
+import com.nosql.pipelines.*;
+import com.nosql.reporting.ReportingModule; // Added import
 import io.github.cdimascio.dotenv.Dotenv;
 import java.sql.*;
 import java.util.*;
@@ -10,18 +10,43 @@ import java.io.*;
 public class Main {
     public static void main(String[] args) throws Exception {
         Dotenv dotenv = Dotenv.load();
-        String mongoUri = dotenv.get("MONGO_URI");
-        String dbUser = dotenv.get("MARIADB_USERNAME");
-        String dbPass = dotenv.get("MARIADB_PASSWORD");
+        Connection conn = DriverManager.getConnection("jdbc:mariadb://localhost:3306/nasa_analytics", 
+            dotenv.get("MARIADB_USERNAME"), dotenv.get("MARIADB_PASSWORD"));
         
+        // 1. Entry Interface
+        System.out.println("=========================================");
+        System.out.println("  NASA LOG ANALYTICS - MAIN MENU ");
+        System.out.println("=========================================");
+        System.out.println("1. Run Pipeline: MongoDB");
+        System.out.println("2. Run Pipeline: Pig (Pending Phase 2)");
+        System.out.println("3. Run Pipeline: Hive (Pending Phase 2)");
+        System.out.println("4. Run Pipeline: MapReduce (Pending Phase 2)");
+        System.out.println("5. View Latest Execution Report"); // Added Option 5
+        System.out.print("Select an option (1-5): ");
+        
+        Scanner scanner = new Scanner(System.in);
+        int choice = scanner.nextInt();
+        
+        // Trigger Reporting Module natively
+        if (choice == 5) {
+            ReportingModule.main(new String[]{});
+            scanner.close();
+            return;
+        }
+
+        Pipeline pipeline;
+        if (choice == 1) {
+            pipeline = new MongoPipeline(dotenv.get("MONGO_URI"), conn);
+        } else {
+            System.out.println("❌ Pipeline not yet implemented. Exiting.");
+            scanner.close();
+            return;
+        }
+
         String runId = "RUN_" + System.currentTimeMillis();
-        int batchSize = 5000; // Mandatory requirement [cite: 60]
+        int batchSize = 10000; // Mandatory requirement [cite: 60]
         
-        Connection conn = DriverManager.getConnection("jdbc:mariadb://localhost:3306/nasa_analytics", dbUser, dbPass);
-        
-        // Use the Interface to ensure equivalence [cite: 35, 70]
-        Pipeline pipeline = new MongoPipeline(mongoUri, conn);
-        
+        // Initialize Metadata
         PreparedStatement initMeta = conn.prepareStatement(
             "INSERT INTO execution_metadata (run_id, pipeline_name, batch_size, runtime_ms) VALUES (?, ?, ?, ?)");
         initMeta.setString(1, runId);
@@ -30,40 +55,47 @@ public class Main {
         initMeta.setLong(4, 0); 
         initMeta.executeUpdate();
 
-        LogParser parser = new LogParser();
-
-        System.out.println("🚀 Starting ETL Pipeline: " + runId);
-        System.out.println("⚙️ Execution Engine: " + pipeline.getPipelineName());
-        long startTime = System.currentTimeMillis(); // Measured per project rules [cite: 64]
+        System.out.println("\n🚀 Starting ETL Pipeline: " + runId + " via " + pipeline.getPipelineName());
+        long startTime = System.currentTimeMillis(); // Start timer [cite: 64]
         
+        LogParser parser = new LogParser();
         List<NasaLogRecord> batch = new ArrayList<>();
         long totalRecords = 0;
         int batchId = 1;
 
-        try (BufferedReader br = new BufferedReader(new FileReader("data/NASA_access_log_Jul95"))) {
-            String line;
-            while ((line = br.readLine()) != null) {
-                NasaLogRecord record = parser.parseLine(line);
-                if (record != null) {
-                    batch.add(record);
-                    totalRecords++;
+        // Process required log files 
+        // String[] targetFiles = {"data/NASA_access_log_Jul95", "data/NASA_access_log_Aug95"};
+        String[] targetFiles = {"data/NASA_access_log_sample"};
+        
+        System.out.println("--- PHASE 1: DATA INGESTION ---");
+        for (String filePath : targetFiles) {
+            System.out.println("📖 Reading: " + filePath);
+            try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
+                String line;
+                while ((line = br.readLine()) != null) {
+                    NasaLogRecord record = parser.parseLine(line);
+                    if (record != null) {
+                        batch.add(record);
+                        totalRecords++;
+                    }
+                    if (batch.size() >= batchSize) {
+                        pipeline.loadBatch(batch, runId, batchId);
+                        System.out.print("\r📦 Ingested " + totalRecords + " records (Batch " + batchId + ")...");
+                        batchId++;
+                        batch.clear();
+                    }
                 }
-                
-                if (batch.size() >= batchSize) {
-                    pipeline.execute(batch, runId, batchId);
-                    // Live Progress Heartbeat
-                    System.out.print("\r📦 Progress: " + totalRecords + " records processed (Batch " + batchId + " complete)...");
-                    batchId++;
-                    batch.clear();
-                }
-            }
-            // Process final partial batch [cite: 61]
-            if (!batch.isEmpty()) {
-                pipeline.execute(batch, runId, batchId);
-                System.out.print("\r📦 Progress: " + totalRecords + " records processed (Final Batch " + batchId + " complete)...");
-                batchId++;
             }
         }
+        if (!batch.isEmpty()) { // Process final partial batch [cite: 61]
+            pipeline.loadBatch(batch, runId, batchId);
+            System.out.print("\r📦 Ingested " + totalRecords + " records (Final Batch " + batchId + ")...");
+            batchId++;
+        }
+
+        System.out.println("\n\n--- PHASE 2: QUERY EXECUTION ---");
+        System.out.println("⚙️ Running Q1, Q2, and Q3 aggregations in " + pipeline.getPipelineName() + "...");
+        pipeline.executeQueries(runId);
 
         long endTime = System.currentTimeMillis();
         long runtimeMs = endTime - startTime; 
@@ -78,12 +110,8 @@ public class Main {
         updateMeta.setString(4, runId);
         updateMeta.executeUpdate();
 
-        System.out.println("\n\n📊 Run Statistics:");
-        System.out.println("Total Records Processed: " + totalRecords);
-        System.out.println("Malformed Records Count: " + parser.getMalformedCount()); // [cite: 31]
-        System.out.println("Total Batches: " + totalBatches);
-        System.out.println("Average Batch Size: " + avgBatchSize);
-        System.out.println("Total Runtime: " + runtimeMs + "ms");
-        System.out.println("✅ Phase 1 Prototype: Data and Metadata successfully stored.");
+        System.out.println("\n✅ Full Dataset Run Complete.");
+        System.out.println("Malformed Records: " + parser.getMalformedCount() + " | Total Runtime: " + runtimeMs + "ms"); // [cite: 31, 64]
+        scanner.close();
     }
 }

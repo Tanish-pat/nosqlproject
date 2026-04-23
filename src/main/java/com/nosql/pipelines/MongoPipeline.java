@@ -20,41 +20,129 @@ public class MongoPipeline implements Pipeline {
     public String getPipelineName() { return "MongoDB"; }
 
     @Override
-    public void execute(List<NasaLogRecord> batch, String runId, int batchId) {
-        MongoDatabase db = mongoClient.getDatabase("nasa_logs");
-        MongoCollection<Document> collection = db.getCollection("raw_batch_" + runId);
-
-        // 1. Load into MongoDB [cite: 72]
+    public void loadBatch(List<NasaLogRecord> batch, String runId, int batchId) {
+        MongoCollection<Document> collection = mongoClient.getDatabase("nasa_logs").getCollection("raw_batch_" + runId);
         List<Document> docs = batch.stream().map(r -> new Document("host", r.host)
-                .append("log_date", r.logDate).append("status_code", r.statusCode)
+                .append("log_date", r.logDate).append("log_hour", r.logHour)
+                .append("resource_path", r.resourcePath).append("status_code", r.statusCode)
                 .append("bytes", r.bytesTransferred)).collect(Collectors.toList());
         collection.insertMany(docs);
+    }
 
-        // 2. Aggregate (Query 1: Daily Traffic)
-        String insertSql = "INSERT INTO q1_daily_traffic (run_id, log_date, status_code, request_count, total_bytes) VALUES (?, ?, ?, ?, ?)";
+    @Override
+    public void executeQueries(String runId) {
+        MongoCollection<Document> collection = mongoClient.getDatabase("nasa_logs").getCollection("raw_batch_" + runId);
         
-        try (PreparedStatement ps = mysqlConn.prepareStatement(insertSql)) {
-            // Group by logDate AND statusCode per Query 1 requirements [cite: 44]
-            Map<String, List<NasaLogRecord>> grouped = batch.stream()
-                .collect(Collectors.groupingBy(r -> r.logDate + "|" + r.statusCode));
+        runQuery1(collection, runId);
+        runQuery2(collection, runId);
+        runQuery3(collection, runId); // Added Query 3
+    }
 
-            for (Map.Entry<String, List<NasaLogRecord>> entry : grouped.entrySet()) {
-                String[] keys = entry.getKey().split("\\|");
-                String logDate = keys[0];
-                int statusCode = Integer.parseInt(keys[1]);
-                long requestCount = entry.getValue().size();
-                long totalBytes = entry.getValue().stream().mapToLong(r -> r.bytesTransferred).sum(); // Actual byte summation
+    private void runQuery1(MongoCollection<Document> collection, String runId) {
+        System.out.println("   -> Executing Query 1 (Daily Traffic)...");
+        List<Document> pipeline = Arrays.asList(
+            new Document("$group", new Document("_id", new Document("log_date", "$log_date").append("status_code", "$status_code"))
+                .append("request_count", new Document("$sum", 1))
+                .append("total_bytes", new Document("$sum", "$bytes")))
+        );
 
+        String sql = "INSERT INTO q1_daily_traffic (run_id, log_date, status_code, request_count, total_bytes) VALUES (?, ?, ?, ?, ?)";
+        try (PreparedStatement ps = mysqlConn.prepareStatement(sql)) {
+            for (Document doc : collection.aggregate(pipeline)) {
+                Document id = (Document) doc.get("_id");
                 ps.setString(1, runId);
-                ps.setString(2, logDate);
-                ps.setInt(3, statusCode);
-                ps.setLong(4, requestCount);
-                ps.setLong(5, totalBytes);
+                ps.setString(2, id.getString("log_date"));
+                ps.setInt(3, id.getInteger("status_code"));
+                ps.setLong(4, ((Number) doc.get("request_count")).longValue());
+                ps.setLong(5, ((Number) doc.get("total_bytes")).longValue());
                 ps.addBatch();
             }
             ps.executeBatch();
-        } catch (SQLException e) { 
-            e.printStackTrace(); 
-        }
+        } catch (SQLException e) { e.printStackTrace(); }
+    }
+
+    private void runQuery2(MongoCollection<Document> collection, String runId) {
+        System.out.println("   -> Executing Query 2 (Top 20 Resources)...");
+        List<Document> pipeline = Arrays.asList(
+            new Document("$group", new Document("_id", "$resource_path")
+                .append("request_count", new Document("$sum", 1))
+                .append("total_bytes", new Document("$sum", "$bytes"))
+                .append("distinct_hosts", new Document("$addToSet", "$host"))),
+            new Document("$project", new Document("request_count", 1)
+                .append("total_bytes", 1)
+                .append("distinct_host_count", new Document("$size", "$distinct_hosts"))),
+            new Document("$sort", new Document("request_count", -1)),
+            new Document("$limit", 20)
+        );
+
+        String sql = "INSERT INTO q2_top_resources (run_id, resource_path, request_count, total_bytes, distinct_host_count) VALUES (?, ?, ?, ?, ?)";
+        try (PreparedStatement ps = mysqlConn.prepareStatement(sql)) {
+            for (Document doc : collection.aggregate(pipeline)) {
+                ps.setString(1, runId);
+                ps.setString(2, doc.getString("_id"));
+                ps.setLong(3, ((Number) doc.get("request_count")).longValue());
+                ps.setLong(4, ((Number) doc.get("total_bytes")).longValue());
+                ps.setLong(5, ((Number) doc.get("distinct_host_count")).longValue());
+                ps.addBatch();
+            }
+            ps.executeBatch();
+        } catch (SQLException e) { e.printStackTrace(); }
+    }
+
+    private void runQuery3(MongoCollection<Document> collection, String runId) {
+        System.out.println("   -> Executing Query 3 (Hourly Error Analysis)...");
+        
+        // MongoDB aggregation using $cond to check if status code is between 400 and 599
+        List<Document> pipeline = Arrays.asList(
+            new Document("$group", new Document("_id", new Document("log_date", "$log_date").append("log_hour", "$log_hour"))
+                .append("total_request_count", new Document("$sum", 1))
+                .append("error_request_count", new Document("$sum", 
+                    new Document("$cond", Arrays.asList(
+                        new Document("$and", Arrays.asList(
+                            new Document("$gte", Arrays.asList("$status_code", 400)),
+                            new Document("$lte", Arrays.asList("$status_code", 599))
+                        )), 1, 0
+                    ))
+                ))
+                .append("error_hosts_set", new Document("$addToSet", 
+                    new Document("$cond", Arrays.asList(
+                        new Document("$and", Arrays.asList(
+                            new Document("$gte", Arrays.asList("$status_code", 400)),
+                            new Document("$lte", Arrays.asList("$status_code", 599))
+                        )), "$host", null
+                    ))
+                ))
+            )
+        );
+
+        String sql = "INSERT INTO q3_hourly_errors (run_id, log_date, log_hour, error_request_count, total_request_count, error_rate, distinct_error_hosts) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        try (PreparedStatement ps = mysqlConn.prepareStatement(sql)) {
+            for (Document doc : collection.aggregate(pipeline)) {
+                Document id = (Document) doc.get("_id");
+                
+                long totalReq = ((Number) doc.get("total_request_count")).longValue();
+                long errorReq = ((Number) doc.get("error_request_count")).longValue();
+                
+                // Clean up the dynamically aggregated array (remove the 'null' entries for non-error hosts)
+                List<String> errorHosts = doc.getList("error_hosts_set", String.class);
+                long distinctErrorHosts = 0;
+                if (errorHosts != null) {
+                    errorHosts.remove(null); 
+                    distinctErrorHosts = errorHosts.size();
+                }
+                
+                float errorRate = totalReq == 0 ? 0 : (float) errorReq / totalReq;
+
+                ps.setString(1, runId);
+                ps.setString(2, id.getString("log_date"));
+                ps.setString(3, id.getString("log_hour"));
+                ps.setLong(4, errorReq);
+                ps.setLong(5, totalReq);
+                ps.setFloat(6, errorRate);
+                ps.setLong(7, distinctErrorHosts);
+                ps.addBatch();
+            }
+            ps.executeBatch();
+        } catch (SQLException e) { e.printStackTrace(); }
     }
 }
