@@ -12,10 +12,15 @@ public class Main {
     public static void main(String[] args) throws Exception {
 
         Dotenv dotenv = Dotenv.load();
+        // Connection conn = DriverManager.getConnection(
+        //         "jdbc:mariadb://localhost:3306/nasa_analytics",
+        //         dotenv.get("MARIADB_USERNAME"),
+        //         dotenv.get("MARIADB_PASSWORD")
+        // );
         Connection conn = DriverManager.getConnection(
-                "jdbc:mariadb://localhost:3306/nasa_analytics",
-                dotenv.get("MARIADB_USERNAME"),
-                dotenv.get("MARIADB_PASSWORD")
+                "jdbc:mysql://localhost:3306/nasa_analytics",
+                dotenv.get("MYSQL_USERNAME"),
+                dotenv.get("MYSQL_PASSWORD")
         );
 
         System.out.println("=========================================");

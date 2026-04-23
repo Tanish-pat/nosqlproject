@@ -23,7 +23,7 @@ public class Main {
         System.out.println("  NASA LOG ANALYTICS - FULL PIPELINE MENU ");
         System.out.println("=========================================");
         System.out.println("1. Run Pipeline: MongoDB(DONE!!)");
-        System.out.println("2. Run Pipeline: Apache Pig(TESTING PENDING)");
+        System.out.println("2. Run Pipeline: Apache Pig(DONE!!)");
         System.out.println("3. Run Pipeline: Apache Hive(TESTING PENDING)");
         System.out.println("4. Run Pipeline: MapReduce(DONE!!)");
         System.out.println("5. View Execution Report & Deep Insights(DONE!!)");
@@ -1253,6 +1253,11 @@ public class ReportingModule {
             <groupId>org.apache.pig</groupId>
             <artifactId>pig</artifactId>
             <version>0.17.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.python</groupId>
+            <artifactId>jython-standalone</artifactId>
+            <version>2.7.2</version>
         </dependency>
     </dependencies>
 
