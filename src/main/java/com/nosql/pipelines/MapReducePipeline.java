@@ -8,289 +8,393 @@ import org.apache.hadoop.io.*;
 import org.apache.hadoop.mapreduce.*;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+
 import java.io.*;
 import java.sql.*;
 import java.util.*;
 
 public class MapReducePipeline implements Pipeline {
-    private final Connection mysqlConn;
-    private final String hdfsBaseDir = "/tmp/nasa_logs_mr/";
 
-    public MapReducePipeline(Connection mysqlConn) {
-        this.mysqlConn = mysqlConn;
+    private final Connection pgConn;
+    private final String baseDir = "/tmp/nasa_logs_mr/";
+
+    public MapReducePipeline(Connection pgConn) {
+        this.pgConn = pgConn;
     }
 
     @Override
-    public String getPipelineName() { return "MapReduce"; }
+    public String getPipelineName() {
+        return "MapReduce";
+    }
 
     @Override
     public void loadBatch(List<NasaLogRecord> batch, String runId, int batchId) {
+
         try {
-            Configuration conf = new Configuration();
-            FileSystem fs = FileSystem.getLocal(conf);
-            Path batchPath = new Path(hdfsBaseDir + runId + "/input/batch_" + batchId + ".tsv");
-            
-            try (FSDataOutputStream out = fs.create(batchPath)) {
+            File dir = new File(baseDir + runId + "/input/");
+            if (!dir.exists()) dir.mkdirs();
+
+            File file = new File(dir, "batch_" + batchId + ".tsv");
+
+            try (BufferedWriter bw = new BufferedWriter(new FileWriter(file))) {
                 for (NasaLogRecord r : batch) {
-                    // Stage data as Tab-Separated Values (TSV) for Hadoop
-                    String line = String.format("%s\t%s\t%s\t%s\t%d\t%d\n", 
-                        r.host, r.logDate, r.logHour, r.resourcePath, r.statusCode, r.bytesTransferred);
-                    out.writeBytes(line);
+                    bw.write(
+                        safe(r.host) + "\t" +
+                        safe(r.logDate) + "\t" +
+                        safe(r.logHour) + "\t" +
+                        safe(r.resourcePath) + "\t" +
+                        r.statusCode + "\t" +
+                        r.bytesTransferred + "\t" +
+                        batchId + "\n"
+                    );
                 }
             }
-        } catch (IOException e) { e.printStackTrace(); }
+
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
-    public void executeQueries(String runId) {
+    public Map<String, Long> executeQueries(String runId) {
+
+        Map<String, Long> timings = new LinkedHashMap<>();
+
         try {
-            long t1 = System.currentTimeMillis();
-            runQuery1(runId);
-            recordQueryMetric(runId, "Q1: Daily Traffic", System.currentTimeMillis() - t1);
+            timings.put("Q1_DAILY_TRAFFIC",
+                runJob(runId, "Q1", Q1Mapper.class, Q1Reducer.class, "q1_out",
+                    (ps, k, v) -> {
+                        ps.setString(1, runId);
+                        ps.setString(2, k.date);
+                        ps.setInt(3, k.status);
+                        ps.setLong(4, v.count);
+                        ps.setLong(5, v.bytes);
+                    },
+                    "INSERT INTO q1_daily_traffic (run_id, log_date, status_code, request_count, total_bytes) VALUES (?,?,?,?,?)"
+                )
+            );
 
-            long t2 = System.currentTimeMillis();
-            runQuery2(runId);
-            recordQueryMetric(runId, "Q2: Top Resources", System.currentTimeMillis() - t2);
+            timings.put("Q2_TOP_RESOURCES",
+                runJob(runId, "Q2", Q2Mapper.class, Q2Reducer.class, "q2_out",
+                    (ps, k, v) -> {
+                        ps.setString(1, runId);
+                        ps.setString(2, k.resource);
+                        ps.setLong(3, v.count);
+                        ps.setLong(4, v.bytes);
+                        ps.setLong(5, v.hosts);
+                    },
+                    "INSERT INTO q2_top_resources (run_id, resource_path, request_count, total_bytes, distinct_host_count) VALUES (?,?,?,?,?)"
+                )
+            );
 
-            long t3 = System.currentTimeMillis();
-            runQuery3(runId);
-            recordQueryMetric(runId, "Q3: Hourly Errors", System.currentTimeMillis() - t3);        
-        } catch (Exception e) { e.printStackTrace(); }
-    }
+            timings.put("Q3_HOURLY_ERRORS",
+                runJob(runId, "Q3", Q3Mapper.class, Q3Reducer.class, "q3_out",
+                    (ps, k, v) -> {
+                        ps.setString(1, runId);
+                        ps.setString(2, k.date);
+                        ps.setString(3, k.hour);
+                        ps.setLong(4, v.errors);
+                        ps.setLong(5, v.total);
+                        ps.setDouble(6, v.total == 0 ? 0.0 : (double) v.errors / v.total);
+                        ps.setLong(7, v.hosts);
+                    },
+                    "INSERT INTO q3_hourly_errors (run_id, log_date, log_hour, error_request_count, total_request_count, error_rate, distinct_error_hosts) VALUES (?,?,?,?,?,?,?)"
+                )
+            );
 
-    private void recordQueryMetric(String runId, String queryName, long duration) {
-        String sql = "INSERT INTO query_metrics (run_id, query_name, runtime_ms) VALUES (?, ?, ?)";
-        try (PreparedStatement ps = mysqlConn.prepareStatement(sql)) {
-            ps.setString(1, runId);
-            ps.setString(2, queryName);
-            ps.setLong(3, duration);
-            ps.executeUpdate();
-        } catch (SQLException e) { e.printStackTrace(); }
-    }
-
-    // ==========================================
-    // QUERY 1: DAILY TRAFFIC (MapReduce)
-    // ==========================================
-    public static class Q1Mapper extends Mapper<LongWritable, Text, Text, Text> {
-        public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
-            String[] parts = value.toString().split("\t");
-            if (parts.length >= 6) {
-                // Key: logDate|statusCode, Value: 1|bytes
-                context.write(new Text(parts[1] + "|" + parts[4]), new Text("1|" + parts[5]));
-            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
+
+        return timings;
     }
 
-    public static class Q1Reducer extends Reducer<Text, Text, Text, Text> {
-        public void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
-            long reqCount = 0;
-            long totalBytes = 0;
-            for (Text val : values) {
-                String[] p = val.toString().split("\\|");
-                reqCount += Long.parseLong(p[0]);
-                totalBytes += Long.parseLong(p[1]);
-            }
-            context.write(key, new Text(reqCount + "|" + totalBytes));
-        }
-    }
+    private long runJob(
+        String runId,
+        String name,
+        Class<? extends Mapper<?, ?, ?, ?>> m,
+        Class<? extends Reducer<?, ?, ?, ?>> r,
+        String outDir,
+        RowMapper mapper,
+        String sql
+    ) throws Exception {
 
-    private void runQuery1(String runId) throws Exception {
-        System.out.println("   -> Executing MR Job: Query 1 (Daily Traffic)...");
-        Path input = new Path(hdfsBaseDir + runId + "/input/");
-        Path output = new Path(hdfsBaseDir + runId + "/q1_out/");
-        
-        Job job = Job.getInstance(new Configuration(), "Q1_DailyTraffic");
+        long start = System.currentTimeMillis();
+
+        Path inPath  = new Path(baseDir + runId + "/input/");
+        Path outPath = new Path(baseDir + runId + "/" + outDir);
+
+        Configuration conf = new Configuration();
+        FileSystem fs = FileSystem.getLocal(conf);
+        if (fs.exists(outPath)) fs.delete(outPath, true);
+
+        Job job = Job.getInstance(conf, name);
         job.setJarByClass(MapReducePipeline.class);
-        job.setMapperClass(Q1Mapper.class);
-        job.setReducerClass(Q1Reducer.class);
-        job.setOutputKeyClass(Text.class);
-        job.setOutputValueClass(Text.class);
-        FileInputFormat.addInputPath(job, input);
-        FileOutputFormat.setOutputPath(job, output);
-        job.waitForCompletion(true);
 
-        // Load to MariaDB
-        loadQ1ToDB(output, runId);
-    }
+        job.setMapperClass(m);
+        job.setReducerClass(r);
 
-    private void loadQ1ToDB(Path outputDir, String runId) throws Exception {
-        FileSystem fs = FileSystem.getLocal(new Configuration());
-        String sql = "INSERT INTO q1_daily_traffic (run_id, log_date, status_code, request_count, total_bytes) VALUES (?, ?, ?, ?, ?)";
-        try (PreparedStatement ps = mysqlConn.prepareStatement(sql)) {
-            for (FileStatus status : fs.listStatus(outputDir)) {
-                if (!status.getPath().getName().startsWith("part-r-")) continue;
-                try (BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(status.getPath())))) {
+        job.setMapOutputKeyClass(KeyWritable.class);
+        job.setMapOutputValueClass(ValueWritable.class);
+        job.setOutputKeyClass(KeyWritable.class);
+        job.setOutputValueClass(ValueWritable.class);
+
+        FileInputFormat.addInputPath(job, inPath);
+        FileOutputFormat.setOutputPath(job, outPath);
+
+        if (!job.waitForCompletion(true)) {
+            throw new RuntimeException("MapReduce job " + name + " failed");
+        }
+
+        try (PreparedStatement ps = pgConn.prepareStatement(sql)) {
+
+            for (FileStatus f : fs.listStatus(outPath)) {
+                if (!f.getPath().getName().startsWith("part")) continue;
+
+                try (BufferedReader br =
+                         new BufferedReader(new InputStreamReader(fs.open(f.getPath())))) {
+
                     String line;
                     while ((line = br.readLine()) != null) {
-                        String[] kv = line.split("\t");
-                        String[] keys = kv[0].split("\\|");
-                        String[] vals = kv[1].split("\\|");
-                        ps.setString(1, runId);
-                        ps.setString(2, keys[0]);
-                        ps.setInt(3, Integer.parseInt(keys[1]));
-                        ps.setLong(4, Long.parseLong(vals[0]));
-                        ps.setLong(5, Long.parseLong(vals[1]));
+                        String[] parts = line.split("\t", 2);
+                        if (parts.length != 2) continue;
+
+                        KeyWritable  k = KeyWritable.fromString(parts[0]);
+                        ValueWritable v = ValueWritable.fromString(parts[1]);
+
+                        mapper.map(ps, k, v);
                         ps.addBatch();
                     }
                 }
             }
+
             ps.executeBatch();
         }
+
+        return System.currentTimeMillis() - start;
     }
 
-    // ==========================================
-    // QUERY 2: TOP RESOURCES (MapReduce)
-    // ==========================================
-    public static class Q2Mapper extends Mapper<LongWritable, Text, Text, Text> {
-        public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
-            String[] parts = value.toString().split("\t");
-            if (parts.length >= 6) {
-                // Key: resourcePath, Value: 1|bytes|host
-                context.write(new Text(parts[3]), new Text("1|" + parts[5] + "|" + parts[0]));
-            }
+    public static class KeyWritable implements WritableComparable<KeyWritable> {
+
+        String date     = "";
+        String hour     = "";
+        String resource = "";
+        int    status   = 0;
+
+        public KeyWritable() {}
+
+        static KeyWritable fromString(String s) {
+            String[] p = s.split("\\|", -1);
+            KeyWritable k = new KeyWritable();
+            if (p.length > 0) k.date     = p[0];
+            if (p.length > 1) k.hour     = p[1];
+            if (p.length > 2) k.resource = p[2];
+            if (p.length > 3) { try { k.status = Integer.parseInt(p[3]); } catch (Exception ignored) {} }
+            return k;
+        }
+
+        @Override
+        public void write(DataOutput out) throws IOException {
+            out.writeUTF(date);
+            out.writeUTF(hour);
+            out.writeUTF(resource);
+            out.writeInt(status);
+        }
+
+        @Override
+        public void readFields(DataInput in) throws IOException {
+            date     = in.readUTF();
+            hour     = in.readUTF();
+            resource = in.readUTF();
+            status   = in.readInt();
+        }
+
+        @Override
+        public int compareTo(KeyWritable o) {
+            int c = date.compareTo(o.date);
+            if (c != 0) return c;
+            c = hour.compareTo(o.hour);
+            if (c != 0) return c;
+            c = resource.compareTo(o.resource);
+            if (c != 0) return c;
+            return Integer.compare(status, o.status);
+        }
+
+        @Override
+        public String toString() {
+            return date + "|" + hour + "|" + resource + "|" + status;
         }
     }
 
-    public static class Q2Reducer extends Reducer<Text, Text, Text, Text> {
-        public void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
-            long reqCount = 0;
-            long totalBytes = 0;
-            Set<String> distinctHosts = new HashSet<>();
-            for (Text val : values) {
-                String[] p = val.toString().split("\\|");
-                reqCount += Long.parseLong(p[0]);
-                totalBytes += Long.parseLong(p[1]);
-                if (p.length > 2) distinctHosts.add(p[2]);
-            }
-            context.write(key, new Text(reqCount + "|" + totalBytes + "|" + distinctHosts.size()));
+    public static class ValueWritable implements Writable {
+
+        long   count  = 0;
+        long   bytes  = 0;
+        long   hosts  = 0;
+        long   total  = 0;
+        long   errors = 0;
+        String hostList = "";
+
+        public ValueWritable() {}
+
+        static ValueWritable fromString(String s) {
+            String[] p = s.split("\\|", -1);
+            ValueWritable v = new ValueWritable();
+            if (p.length > 0) { try { v.count  = Long.parseLong(p[0]); } catch (Exception ignored) {} }
+            if (p.length > 1) { try { v.bytes  = Long.parseLong(p[1]); } catch (Exception ignored) {} }
+            if (p.length > 2) { try { v.hosts  = Long.parseLong(p[2]); } catch (Exception ignored) {} }
+            if (p.length > 3) { try { v.total  = Long.parseLong(p[3]); } catch (Exception ignored) {} }
+            if (p.length > 4) { try { v.errors = Long.parseLong(p[4]); } catch (Exception ignored) {} }
+            return v;
+        }
+
+        @Override
+        public void write(DataOutput out) throws IOException {
+            out.writeLong(count);
+            out.writeLong(bytes);
+            out.writeLong(hosts);
+            out.writeLong(total);
+            out.writeLong(errors);
+            out.writeUTF(hostList);
+        }
+
+        @Override
+        public void readFields(DataInput in) throws IOException {
+            count    = in.readLong();
+            bytes    = in.readLong();
+            hosts    = in.readLong();
+            total    = in.readLong();
+            errors   = in.readLong();
+            hostList = in.readUTF();
+        }
+
+        @Override
+        public String toString() {
+            return count + "|" + bytes + "|" + hosts + "|" + total + "|" + errors;
         }
     }
 
-    private void runQuery2(String runId) throws Exception {
-        System.out.println("   -> Executing MR Job: Query 2 (Top Resources)...");
-        Path input = new Path(hdfsBaseDir + runId + "/input/");
-        Path output = new Path(hdfsBaseDir + runId + "/q2_out/");
-        
-        Job job = Job.getInstance(new Configuration(), "Q2_TopResources");
-        job.setJarByClass(MapReducePipeline.class);
-        job.setMapperClass(Q2Mapper.class);
-        job.setReducerClass(Q2Reducer.class);
-        job.setOutputKeyClass(Text.class);
-        job.setOutputValueClass(Text.class);
-        FileInputFormat.addInputPath(job, input);
-        FileOutputFormat.setOutputPath(job, output);
-        job.waitForCompletion(true);
-
-        loadQ2ToDB(output, runId);
+    @FunctionalInterface
+    interface RowMapper {
+        void map(PreparedStatement ps, KeyWritable k, ValueWritable v) throws SQLException;
     }
 
-    private void loadQ2ToDB(Path outputDir, String runId) throws Exception {
-        FileSystem fs = FileSystem.getLocal(new Configuration());
-        List<String[]> results = new ArrayList<>();
-        
-        for (FileStatus status : fs.listStatus(outputDir)) {
-            if (!status.getPath().getName().startsWith("part-r-")) continue;
-            try (BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(status.getPath())))) {
-                String line;
-                while ((line = br.readLine()) != null) {
-                    results.add(line.split("\t"));
-                }
-            }
-        }
-        
-        // Final Sort to get Top 20 per requirement
-        results.sort((a, b) -> Long.compare(Long.parseLong(b[1].split("\\|")[0]), Long.parseLong(a[1].split("\\|")[0])));
-        
-        String sql = "INSERT INTO q2_top_resources (run_id, resource_path, request_count, total_bytes, distinct_host_count) VALUES (?, ?, ?, ?, ?)";
-        try (PreparedStatement ps = mysqlConn.prepareStatement(sql)) {
-            for (int i = 0; i < Math.min(20, results.size()); i++) {
-                String[] kv = results.get(i);
-                String[] vals = kv[1].split("\\|");
-                ps.setString(1, runId);
-                ps.setString(2, kv[0]);
-                ps.setLong(3, Long.parseLong(vals[0]));
-                ps.setLong(4, Long.parseLong(vals[1]));
-                ps.setLong(5, Long.parseLong(vals[2]));
-                ps.addBatch();
-            }
-            ps.executeBatch();
+    public static class Q1Mapper extends Mapper<LongWritable, Text, KeyWritable, ValueWritable> {
+        @Override
+        public void map(LongWritable k, Text v, Context c) throws IOException, InterruptedException {
+            String[] p = v.toString().split("\t", -1);
+            if (p.length < 6) return;
+
+            KeyWritable key = new KeyWritable();
+            key.date   = p[1];
+            key.status = parseInt(p[4]);
+
+            ValueWritable val = new ValueWritable();
+            val.count = 1;
+            val.bytes = parseLong(p[5]);
+
+            c.write(key, val);
         }
     }
 
-    // ==========================================
-    // QUERY 3: HOURLY ERRORS (MapReduce)
-    // ==========================================
-    public static class Q3Mapper extends Mapper<LongWritable, Text, Text, Text> {
-        public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
-            String[] parts = value.toString().split("\t");
-            if (parts.length >= 6) {
-                int status = Integer.parseInt(parts[4]);
-                int isError = (status >= 400 && status <= 599) ? 1 : 0;
-                String hostStr = isError == 1 ? parts[0] : "NONE";
-                // Key: logDate|logHour, Value: isError|1|errorHost
-                context.write(new Text(parts[1] + "|" + parts[2]), new Text(isError + "|1|" + hostStr));
+    public static class Q1Reducer extends Reducer<KeyWritable, ValueWritable, KeyWritable, ValueWritable> {
+        @Override
+        public void reduce(KeyWritable k, Iterable<ValueWritable> vs, Context c)
+                throws IOException, InterruptedException {
+            ValueWritable out = new ValueWritable();
+            for (ValueWritable v : vs) {
+                out.count += v.count;
+                out.bytes += v.bytes;
             }
+            c.write(k, out);
         }
     }
 
-    public static class Q3Reducer extends Reducer<Text, Text, Text, Text> {
-        public void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
-            long errCount = 0;
-            long totCount = 0;
-            Set<String> distinctHosts = new HashSet<>();
-            for (Text val : values) {
-                String[] p = val.toString().split("\\|");
-                errCount += Long.parseLong(p[0]);
-                totCount += Long.parseLong(p[1]);
-                if (p.length > 2 && !p[2].equals("NONE")) distinctHosts.add(p[2]);
-            }
-            float errorRate = totCount == 0 ? 0 : (float) errCount / totCount;
-            context.write(key, new Text(errCount + "|" + totCount + "|" + errorRate + "|" + distinctHosts.size()));
+    public static class Q2Mapper extends Mapper<LongWritable, Text, KeyWritable, ValueWritable> {
+        @Override
+        public void map(LongWritable k, Text v, Context c) throws IOException, InterruptedException {
+            String[] p = v.toString().split("\t", -1);
+            if (p.length < 6) return;
+
+            KeyWritable key = new KeyWritable();
+            key.resource = p[3];
+
+            ValueWritable val = new ValueWritable();
+            val.count    = 1;
+            val.bytes    = parseLong(p[5]);
+            val.hostList = p[0]; // emit host for deduplication in reducer
+
+            c.write(key, val);
         }
     }
 
-    private void runQuery3(String runId) throws Exception {
-        System.out.println("   -> Executing MR Job: Query 3 (Hourly Errors)...");
-        Path input = new Path(hdfsBaseDir + runId + "/input/");
-        Path output = new Path(hdfsBaseDir + runId + "/q3_out/");
-        
-        Job job = Job.getInstance(new Configuration(), "Q3_HourlyErrors");
-        job.setJarByClass(MapReducePipeline.class);
-        job.setMapperClass(Q3Mapper.class);
-        job.setReducerClass(Q3Reducer.class);
-        job.setOutputKeyClass(Text.class);
-        job.setOutputValueClass(Text.class);
-        FileInputFormat.addInputPath(job, input);
-        FileOutputFormat.setOutputPath(job, output);
-        job.waitForCompletion(true);
+    public static class Q2Reducer extends Reducer<KeyWritable, ValueWritable, KeyWritable, ValueWritable> {
+        @Override
+        public void reduce(KeyWritable k, Iterable<ValueWritable> vs, Context c)
+                throws IOException, InterruptedException {
+            ValueWritable out = new ValueWritable();
+            Set<String> hostSet = new HashSet<>();
 
-        loadQ3ToDB(output, runId);
+            for (ValueWritable v : vs) {
+                out.count += v.count;
+                out.bytes += v.bytes;
+                if (!v.hostList.isEmpty()) hostSet.add(v.hostList);
+            }
+
+            out.hosts = hostSet.size(); // correct distinct host count
+            c.write(k, out);
+        }
     }
 
-    private void loadQ3ToDB(Path outputDir, String runId) throws Exception {
-        FileSystem fs = FileSystem.getLocal(new Configuration());
-        String sql = "INSERT INTO q3_hourly_errors (run_id, log_date, log_hour, error_request_count, total_request_count, error_rate, distinct_error_hosts) VALUES (?, ?, ?, ?, ?, ?, ?)";
-        try (PreparedStatement ps = mysqlConn.prepareStatement(sql)) {
-            for (FileStatus status : fs.listStatus(outputDir)) {
-                if (!status.getPath().getName().startsWith("part-r-")) continue;
-                try (BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(status.getPath())))) {
-                    String line;
-                    while ((line = br.readLine()) != null) {
-                        String[] kv = line.split("\t");
-                        String[] keys = kv[0].split("\\|");
-                        String[] vals = kv[1].split("\\|");
-                        ps.setString(1, runId);
-                        ps.setString(2, keys[0]);
-                        ps.setString(3, keys[1]);
-                        ps.setLong(4, Long.parseLong(vals[0]));
-                        ps.setLong(5, Long.parseLong(vals[1]));
-                        ps.setFloat(6, Float.parseFloat(vals[2]));
-                        ps.setLong(7, Long.parseLong(vals[3]));
-                        ps.addBatch();
-                    }
-                }
-            }
-            ps.executeBatch();
+    public static class Q3Mapper extends Mapper<LongWritable, Text, KeyWritable, ValueWritable> {
+        @Override
+        public void map(LongWritable k, Text v, Context c) throws IOException, InterruptedException {
+            String[] p = v.toString().split("\t", -1);
+            if (p.length < 6) return;
+
+            int status = parseInt(p[4]);
+            boolean isError = status >= 400 && status <= 599;
+
+            KeyWritable key = new KeyWritable();
+            key.date = p[1];
+            key.hour = p[2];
+
+            ValueWritable val = new ValueWritable();
+            val.total    = 1;
+            val.errors   = isError ? 1 : 0;
+            val.hostList = isError ? p[0] : ""; // only carry host for error records
+
+            c.write(key, val);
         }
+    }
+
+    public static class Q3Reducer extends Reducer<KeyWritable, ValueWritable, KeyWritable, ValueWritable> {
+        @Override
+        public void reduce(KeyWritable k, Iterable<ValueWritable> vs, Context c)
+                throws IOException, InterruptedException {
+            ValueWritable out = new ValueWritable();
+            Set<String> errorHostSet = new HashSet<>();
+
+            for (ValueWritable v : vs) {
+                out.total  += v.total;
+                out.errors += v.errors;
+                if (!v.hostList.isEmpty()) errorHostSet.add(v.hostList);
+            }
+
+            out.hosts = errorHostSet.size();
+            c.write(k, out);
+        }
+    }
+
+    private String safe(String s) {
+        return s == null ? "-" : s;
+    }
+
+    private static int parseInt(String s) {
+        try { return Integer.parseInt(s.trim()); } catch (Exception e) { return 0; }
+    }
+
+    private static long parseLong(String s) {
+        try { return Long.parseLong(s.trim()); } catch (Exception e) { return 0; }
     }
 }

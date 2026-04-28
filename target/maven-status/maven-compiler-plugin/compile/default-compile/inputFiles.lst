@@ -1,9 +1,0 @@
-/home/tanish/Desktop/nosqlproject/src/main/java/Main.java
-/home/tanish/Desktop/nosqlproject/src/main/java/com/nosql/parser/LogParser.java
-/home/tanish/Desktop/nosqlproject/src/main/java/com/nosql/parser/NasaLogRecord.java
-/home/tanish/Desktop/nosqlproject/src/main/java/com/nosql/pipelines/HivePipeline.java
-/home/tanish/Desktop/nosqlproject/src/main/java/com/nosql/pipelines/MapReducePipeline.java
-/home/tanish/Desktop/nosqlproject/src/main/java/com/nosql/pipelines/MongoPipeline.java
-/home/tanish/Desktop/nosqlproject/src/main/java/com/nosql/pipelines/PigPipeline.java
-/home/tanish/Desktop/nosqlproject/src/main/java/com/nosql/pipelines/Pipeline.java
-/home/tanish/Desktop/nosqlproject/src/main/java/com/nosql/reporting/ReportingModule.java

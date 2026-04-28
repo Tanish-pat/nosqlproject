@@ -2,173 +2,234 @@ package com.nosql.pipelines;
 
 import com.nosql.parser.NasaLogRecord;
 import org.apache.pig.PigServer;
+
 import java.io.*;
 import java.sql.*;
-import java.util.List;
+import java.util.*;
 
 public class PigPipeline implements Pipeline {
-    private final Connection mysqlConn;
+
+    private final Connection conn;
     private final String baseDir = "/tmp/nasa_logs_pig/";
 
-    public PigPipeline(Connection mysqlConn) {
-        this.mysqlConn = mysqlConn;
+    public PigPipeline(Connection conn) {
+        this.conn = conn;
     }
 
     @Override
-    public String getPipelineName() { return "Pig"; }
+    public String getPipelineName() {
+        return "Pig";
+    }
 
     @Override
     public void loadBatch(List<NasaLogRecord> batch, String runId, int batchId) {
+
         try {
             File dir = new File(baseDir + runId + "/input/");
             if (!dir.exists()) dir.mkdirs();
 
             File file = new File(dir, "batch_" + batchId + ".tsv");
+
             try (BufferedWriter bw = new BufferedWriter(new FileWriter(file))) {
                 for (NasaLogRecord r : batch) {
-                    String line = String.format("%s\t%s\t%s\t%s\t%d\t%d\n", 
-                        r.host, r.logDate, r.logHour, r.resourcePath, r.statusCode, r.bytesTransferred);
-                    bw.write(line);
+                    bw.write(
+                        safe(r.host) + "\t" +
+                        safe(r.logDate) + "\t" +
+                        safe(r.logHour) + "\t" +
+                        safe(r.resourcePath) + "\t" +
+                        r.statusCode + "\t" +
+                        r.bytesTransferred + "\t" +
+                        batchId + "\n"
+                    );
                 }
             }
-        } catch (IOException e) { e.printStackTrace(); }
+
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
-    public void executeQueries(String runId) {
+    public Map<String, Long> executeQueries(String runId) {
+
+        Map<String, Long> timings = new LinkedHashMap<>();
+
         try {
-            System.out.println("   -> Starting Apache Pig (Local Mode)...");
-            PigServer pigServer = new PigServer("local");
-            String inputDir = baseDir + runId + "/input/";
+            PigServer pig = new PigServer("local");
 
-            // Load Data into Pig Context
-            pigServer.registerQuery("raw = LOAD 'file://" + inputDir + "' USING PigStorage('\\t') " +
-                "AS (host:chararray, log_date:chararray, log_hour:chararray, resource_path:chararray, status_code:int, bytes:long);");
+            pig.registerQuery(
+                "raw = LOAD 'file://" + baseDir + runId + "/input/' " +
+                "USING PigStorage('\\t') AS (" +
+                "host:chararray, log_date:chararray, log_hour:chararray, " +
+                "resource_path:chararray, status_code:int, bytes:long, batch_id:int);"
+            );
 
-            long t1 = System.currentTimeMillis();
-            runQuery1(pigServer, runId);
-            recordQueryMetric(runId, "Q1: Daily Traffic", System.currentTimeMillis() - t1);
+            timings.put("Q1_DAILY_TRAFFIC", runQ1(pig, runId));
+            timings.put("Q2_TOP_RESOURCES", runQ2(pig, runId));
+            timings.put("Q3_HOURLY_ERRORS", runQ3(pig, runId));
 
-            long t2 = System.currentTimeMillis();
-            runQuery2(pigServer, runId);
-            recordQueryMetric(runId, "Q2: Top Resources", System.currentTimeMillis() - t2);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
 
-            long t3 = System.currentTimeMillis();
-            runQuery3(pigServer, runId);
-            recordQueryMetric(runId, "Q3: Hourly Errors", System.currentTimeMillis() - t3);
-
-        } catch (Exception e) { e.printStackTrace(); }
+        return timings;
     }
 
-    private void recordQueryMetric(String runId, String queryName, long duration) {
-        String sql = "INSERT INTO query_metrics (run_id, query_name, runtime_ms) VALUES (?, ?, ?)";
-        try (PreparedStatement ps = mysqlConn.prepareStatement(sql)) {
-            ps.setString(1, runId);
-            ps.setString(2, queryName);
-            ps.setLong(3, duration);
-            ps.executeUpdate();
-        } catch (SQLException e) { e.printStackTrace(); }
+    private long runQ1(PigServer pig, String runId) throws Exception {
+
+        long start = System.currentTimeMillis();
+
+        pig.registerQuery(
+            "g1 = GROUP raw BY (log_date, status_code);" +
+            "q1 = FOREACH g1 GENERATE " +
+            "  FLATTEN(group) AS (log_date, status_code), " +
+            "  COUNT(raw) AS request_count, " +
+            "  SUM(raw.bytes) AS total_bytes;"
+        );
+
+        store(
+            pig,
+            "q1",
+            baseDir + runId + "/q1_out",
+            "INSERT INTO q1_daily_traffic (run_id, log_date, status_code, request_count, total_bytes) VALUES (?,?,?,?,?)",
+            (ps, v) -> {
+                ps.setString(1, runId);
+                ps.setString(2, v[0]);
+                ps.setInt(3, parseInt(v[1]));
+                ps.setLong(4, parseLong(v[2]));
+                ps.setLong(5, parseLong(v[3]));
+            }
+        );
+
+        return System.currentTimeMillis() - start;
     }
 
-    private void runQuery1(PigServer pigServer, String runId) throws Exception {
-        System.out.println("   -> Executing Pig Job: Query 1 (Daily Traffic)...");
-        String q1Out = baseDir + runId + "/q1_out";
-        pigServer.registerQuery("q1_grp = GROUP raw BY (log_date, status_code);");
-        pigServer.registerQuery("q1_out = FOREACH q1_grp GENERATE FLATTEN(group) AS (log_date, status_code), " +
-            "COUNT(raw) AS req_count, SUM(raw.bytes) AS total_bytes;");
-        pigServer.store("q1_out", "file://" + q1Out, "PigStorage('\\t')");
-        loadQ1ToDB(q1Out, runId);
+    private long runQ2(PigServer pig, String runId) throws Exception {
+
+        long start = System.currentTimeMillis();
+
+        pig.registerQuery(
+            "g2a = GROUP raw BY (resource_path, host);" +
+            "deduped = FOREACH g2a GENERATE " +
+            "  FLATTEN(group) AS (resource_path, host), " +
+            "  COUNT(raw) AS rc, " +
+            "  SUM(raw.bytes) AS bc;" +
+
+            "g2b = GROUP deduped BY resource_path;" +
+            "q2_all = FOREACH g2b GENERATE " +
+            "  group AS resource_path, " +
+            "  SUM(deduped.rc) AS request_count, " +
+            "  SUM(deduped.bc) AS total_bytes, " +
+            "  COUNT(deduped) AS distinct_host_count;" +
+
+            "q2_sorted = ORDER q2_all BY request_count DESC;" +
+            "q2 = LIMIT q2_sorted 20;"
+        );
+
+        store(
+            pig,
+            "q2",
+            baseDir + runId + "/q2_out",
+            "INSERT INTO q2_top_resources (run_id, resource_path, request_count, total_bytes, distinct_host_count) VALUES (?,?,?,?,?)",
+            (ps, v) -> {
+                ps.setString(1, runId);
+                ps.setString(2, v[0]);
+                ps.setLong(3, parseLong(v[1]));
+                ps.setLong(4, parseLong(v[2]));
+                ps.setLong(5, parseLong(v[3]));
+            }
+        );
+
+        return System.currentTimeMillis() - start;
     }
 
-    private void runQuery2(PigServer pigServer, String runId) throws Exception {
-        System.out.println("   -> Executing Pig Job: Query 2 (Top Resources)...");
-        String q2Out = baseDir + runId + "/q2_out";
-        pigServer.registerQuery("q2_grp = GROUP raw BY resource_path;");
-        pigServer.registerQuery("q2_agg = FOREACH q2_grp { " +
-            "unique_hosts = DISTINCT raw.host; " +
-            "GENERATE group AS resource_path, COUNT(raw) AS req_count, SUM(raw.bytes) AS total_bytes, COUNT(unique_hosts) AS distinct_host_count; };");
-        pigServer.registerQuery("q2_sorted = ORDER q2_agg BY req_count DESC;");
-        pigServer.registerQuery("q2_limit = LIMIT q2_sorted 20;");
-        pigServer.store("q2_limit", "file://" + q2Out, "PigStorage('\\t')");
-        loadQ2ToDB(q2Out, runId);
+    private long runQ3(PigServer pig, String runId) throws Exception {
+
+        long start = System.currentTimeMillis();
+
+        pig.registerQuery(
+            "g3 = GROUP raw BY (log_date, log_hour);" +
+
+            "q3 = FOREACH g3 {" +
+            "  errs = FILTER raw BY status_code >= 400 AND status_code <= 599;" +
+            "  err_hosts = FOREACH errs GENERATE host;" +
+            "  distinct_err_hosts = DISTINCT err_hosts;" +
+            "  GENERATE " +
+            "    FLATTEN(group) AS (log_date, log_hour), " +
+            "    COUNT(errs) AS error_request_count, " +
+            "    COUNT(raw) AS total_request_count, " +
+            "    COUNT(distinct_err_hosts) AS distinct_error_hosts;" +
+            "};"
+        );
+
+        store(
+            pig,
+            "q3",
+            baseDir + runId + "/q3_out",
+            "INSERT INTO q3_hourly_errors (run_id, log_date, log_hour, error_request_count, total_request_count, error_rate, distinct_error_hosts) VALUES (?,?,?,?,?,?,?)",
+            (ps, v) -> {
+                long err = parseLong(v[2]);
+                long tot = parseLong(v[3]);
+
+                ps.setString(1, runId);
+                ps.setString(2, v[0]);
+                ps.setString(3, v[1]);
+                ps.setLong(4, err);
+                ps.setLong(5, tot);
+                ps.setDouble(6, tot == 0 ? 0.0 : (double) err / tot);
+                ps.setLong(7, parseLong(v[4]));
+            }
+        );
+
+        return System.currentTimeMillis() - start;
     }
 
-    private void runQuery3(PigServer pigServer, String runId) throws Exception {
-        System.out.println("   -> Executing Pig Job: Query 3 (Hourly Errors)...");
-        String q3Out = baseDir + runId + "/q3_out";
-        pigServer.registerQuery("q3_grp = GROUP raw BY (log_date, log_hour);");
-        pigServer.registerQuery("q3_agg = FOREACH q3_grp { " +
-            "errors = FILTER raw BY (status_code >= 400 AND status_code <= 599); " +
-            "unique_err_hosts = DISTINCT errors.host; " +
-            "GENERATE FLATTEN(group) AS (log_date, log_hour), " +
-            "COUNT(errors) AS error_request_count, COUNT(raw) AS total_request_count, " +
-            "((float)COUNT(errors) / (float)COUNT(raw)) AS error_rate, COUNT(unique_err_hosts) AS distinct_error_hosts; };");
-        pigServer.store("q3_agg", "file://" + q3Out, "PigStorage('\\t')");
-        loadQ3ToDB(q3Out, runId);
-    }
+    private void store(
+        PigServer pig,
+        String alias,
+        String out,
+        String sql,
+        DBSetter setter
+    ) throws Exception {
 
-    private void loadQ1ToDB(String outDir, String runId) throws Exception {
-        String sql = "INSERT INTO q1_daily_traffic (run_id, log_date, status_code, request_count, total_bytes) VALUES (?, ?, ?, ?, ?)";
-        try (PreparedStatement ps = mysqlConn.prepareStatement(sql)) {
-            for (File f : new File(outDir).listFiles((d, name) -> name.startsWith("part-"))) {
+        pig.store(alias, "file://" + out, "PigStorage('\\t')");
+
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            File folder = new File(out);
+            File[] files = folder.listFiles((d, name) -> name.startsWith("part-"));
+
+            if (files == null) return;
+
+            for (File f : files) {
                 try (BufferedReader br = new BufferedReader(new FileReader(f))) {
                     String line;
                     while ((line = br.readLine()) != null) {
-                        String[] vals = line.split("\t");
-                        ps.setString(1, runId);
-                        ps.setString(2, vals[0]);
-                        ps.setInt(3, Integer.parseInt(vals[1]));
-                        ps.setLong(4, Long.parseLong(vals[2]));
-                        ps.setLong(5, vals.length > 3 && !vals[3].isEmpty() ? Long.parseLong(vals[3]) : 0);
+                        String[] v = line.split("\t", -1);
+                        setter.set(ps, v);
                         ps.addBatch();
                     }
                 }
             }
+
             ps.executeBatch();
         }
     }
 
-    private void loadQ2ToDB(String outDir, String runId) throws Exception {
-        String sql = "INSERT INTO q2_top_resources (run_id, resource_path, request_count, total_bytes, distinct_host_count) VALUES (?, ?, ?, ?, ?)";
-        try (PreparedStatement ps = mysqlConn.prepareStatement(sql)) {
-            for (File f : new File(outDir).listFiles((d, name) -> name.startsWith("part-"))) {
-                try (BufferedReader br = new BufferedReader(new FileReader(f))) {
-                    String line;
-                    while ((line = br.readLine()) != null) {
-                        String[] vals = line.split("\t");
-                        ps.setString(1, runId);
-                        ps.setString(2, vals[0]);
-                        ps.setLong(3, Long.parseLong(vals[1]));
-                        ps.setLong(4, vals.length > 2 && !vals[2].isEmpty() ? Long.parseLong(vals[2]) : 0);
-                        ps.setLong(5, vals.length > 3 && !vals[3].isEmpty() ? Long.parseLong(vals[3]) : 0);
-                        ps.addBatch();
-                    }
-                }
-            }
-            ps.executeBatch();
-        }
+    @FunctionalInterface
+    interface DBSetter {
+        void set(PreparedStatement ps, String[] v) throws SQLException;
     }
 
-    private void loadQ3ToDB(String outDir, String runId) throws Exception {
-        String sql = "INSERT INTO q3_hourly_errors (run_id, log_date, log_hour, error_request_count, total_request_count, error_rate, distinct_error_hosts) VALUES (?, ?, ?, ?, ?, ?, ?)";
-        try (PreparedStatement ps = mysqlConn.prepareStatement(sql)) {
-            for (File f : new File(outDir).listFiles((d, name) -> name.startsWith("part-"))) {
-                try (BufferedReader br = new BufferedReader(new FileReader(f))) {
-                    String line;
-                    while ((line = br.readLine()) != null) {
-                        String[] vals = line.split("\t");
-                        ps.setString(1, runId);
-                        ps.setString(2, vals[0]);
-                        ps.setString(3, vals[1]);
-                        ps.setLong(4, Long.parseLong(vals[2]));
-                        ps.setLong(5, Long.parseLong(vals[3]));
-                        ps.setFloat(6, Float.parseFloat(vals[4]));
-                        ps.setLong(7, vals.length > 5 && !vals[5].isEmpty() ? Long.parseLong(vals[5]) : 0);
-                        ps.addBatch();
-                    }
-                }
-            }
-            ps.executeBatch();
-        }
+    private int parseInt(String s) {
+        try { return Integer.parseInt(s.trim()); } catch (Exception e) { return 0; }
+    }
+
+    private long parseLong(String s) {
+        try { return Long.parseLong(s.trim()); } catch (Exception e) { return 0; }
+    }
+
+    private String safe(String s) {
+        return s == null ? "-" : s;
     }
 }
