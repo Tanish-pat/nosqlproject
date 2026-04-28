@@ -1,27 +1,27 @@
-Starting ETL Pipeline: RUN_1777344816057 via Hive
+Starting ETL Pipeline: RUN_1777353787513 via Hive
 Run Complete.
 Total Records Parsed : 10000
 Malformed Records    : 0
 Total Batches        : 10
 Avg Batch Size       : 1000.00
-Total Runtime        : 7382 ms
+Total Runtime        : 8663 ms
 ==================================================
        NASA ETL REPORTING DASHBOARD               
 ==================================================
 
 [ EXECUTION METADATA ]
-Run ID           : RUN_1777344816057
+Run ID           : RUN_1777353787513
 Pipeline Used    : Hive
-Execution Time   : 2026-04-28 02:53:36.071835
-Total Runtime    : 7382 ms
+Execution Time   : 2026-04-28 05:23:07.522953
+Total Runtime    : 8663 ms
 Total Batches    : 10
 Avg Batch Size   : 1000.00
 Malformed Records: 0
 
   --- Granular Query Telemetry ---
-  * Q1_DAILY_TRAFFIC     : 3256 ms
-  * Q2_TOP_RESOURCES     : 992 ms
-  * Q3_HOURLY_ERRORS     : 756 ms
+  * Q1_DAILY_TRAFFIC     : 3357 ms
+  * Q2_TOP_RESOURCES     : 1963 ms
+  * Q3_HOURLY_ERRORS     : 792 ms
 
 [ QUERY 1: DAILY TRAFFIC SUMMARY (Global) ]
 --------------------------------------------------------------------
@@ -103,7 +103,5 @@ Log Date     | Hour   | Error Reqs   | Total Reqs   | Error Rate | Distinct Host
 =========================================================================================
 Pipeline        | Total Runs   | Fastest Runtime (ms) | Avg Runtime (ms)    
 -----------------------------------------------------------------------------------------
-MongoDB         | 1            | 628                  | 628.00              
-Pig             | 1            | 5681                 | 5681.00             
-Hive            | 1            | 7382                 | 7382.00             
+Hive            | 1            | 8663                 | 8663.00             
 =========================================================================================
