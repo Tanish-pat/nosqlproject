@@ -6,38 +6,18 @@ Ensure you have Docker and Docker Compose installed.
 
 ## Pipelines
 
-There are 4 pipelines, steps to run each one are given below. You need to set the correct `PIPELINE_NUMBER` env variable.
+There are 4 pipelines: Mongo, Pig, Hive and MapReduce
 
-Mongo (1)
-
-```shell
-docker compose -f docker-compose.mongo.yml build
-docker compose -f docker-compose.mongo.yml run --rm app > output/mongo_results.txt
-```
-
-Pig (2)
+To run,
 
 ```shell
-docker compose -f docker-compose.pig.yml build
-docker compose -f docker-compose.pig.yml run --rm app > output/pig_results.txt
+docker compose up -d --build
 ```
 
-Hive (Wait for 10-15 seconds before running) (3)
+Cleanup
 
 ```shell
-docker compose -f docker-compose.hive.yml build
-docker compose -f docker-compose.hive.yml run --rm app > output/hive_results.txt
+docker compose down -v
 ```
 
-MapReduce (4)
-
-```shell
-docker compose -f docker-compose.mapreduce.yml build
-docker compose -f docker-compose.mapreduce.yml run --rm app > output/mapreduce_results.txt
-```
-
-Cleanup to remove all running containers and volumes
-
-```shell
-docker compose -f docker-compose.mongo.yml -f docker-compose.pig.yml -f docker-compose.hive.yml -f docker-compose.mapreduce.yml down -v
-```
+Then start the respective app container (`docker attach mongo-app / pig-app / hive-app / mr-app`) by attaching it to the terminal and then pressing the corresponding choice (1-4) to start the pipeline.

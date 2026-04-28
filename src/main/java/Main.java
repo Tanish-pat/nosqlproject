@@ -19,7 +19,8 @@ public class Main {
 
     public static void main(String[] args) {
 
-        try {
+        try (Scanner scanner = new Scanner(System.in)) {
+
             String dbUrl  = getEnv("DB_URL", true);
             String dbUser = getEnv("DB_USER", true);
             String dbPass = getEnv("DB_PASSWORD", true);
@@ -33,7 +34,14 @@ public class Main {
                     Optional.ofNullable(System.getenv("BATCH_SIZE")).orElse("1000")
             );
 
-            int choice = Integer.parseInt(getEnv("PIPELINE_NUMBER", true));
+            // System.out.println("Select Pipeline:");
+            // System.out.println("1 - Mongo");
+            // System.out.println("2 - Pig");
+            // System.out.println("3 - Hive");
+            // System.out.println("4 - MapReduce");
+            // System.out.print("Enter choice (1-4): ");
+
+            int choice = Integer.parseInt(scanner.nextLine().trim());
 
             try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPass)) {
 
@@ -68,7 +76,7 @@ public class Main {
                         break;
 
                     default:
-                        throw new RuntimeException("Invalid PIPELINE_NUMBER. Must be 1–4.");
+                        throw new RuntimeException("Invalid choice. Must be 1–4.");
                 }
 
                 String runId = "RUN_" + System.currentTimeMillis();
@@ -92,8 +100,6 @@ public class Main {
                 long totalRecords = 0;
                 int batchId = 1;
 
-                // Replace with big log set here
-                
                 String[] targetFiles = {"/app/data/NASA_access_log_sample"};
 
                 for (String filePath : targetFiles) {
@@ -155,7 +161,7 @@ public class Main {
                 System.out.println("Total Records Parsed : " + parser.getParsedCount());
                 System.out.println("Malformed Records    : " + parser.getMalformedCount());
                 System.out.println("Total Batches        : " + totalBatches);
-                System.out.printf ("Avg Batch Size       : %.2f%n", avgBatchSize);
+                System.out.printf("Avg Batch Size       : %.2f%n", avgBatchSize);
                 System.out.println("Total Runtime        : " + runtimeMs + " ms");
 
                 ReportingModule.run(conn);
