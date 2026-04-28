@@ -1,0 +1,107 @@
+Starting ETL Pipeline: RUN_1777344656725 via MongoDB
+Run Complete.
+Total Records Parsed : 10000
+Malformed Records    : 0
+Total Batches        : 10
+Avg Batch Size       : 1000.00
+Total Runtime        : 628 ms
+==================================================
+       NASA ETL REPORTING DASHBOARD               
+==================================================
+
+[ EXECUTION METADATA ]
+Run ID           : RUN_1777344656725
+Pipeline Used    : MongoDB
+Execution Time   : 2026-04-28 02:50:56.735965
+Total Runtime    : 628 ms
+Total Batches    : 10
+Avg Batch Size   : 1000.00
+Malformed Records: 0
+
+  --- Granular Query Telemetry ---
+  * Q1_DAILY_TRAFFIC     : 68 ms
+  * Q2_TOP_RESOURCES     : 33 ms
+  * Q3_HOURLY_ERRORS     : 74 ms
+
+[ QUERY 1: DAILY TRAFFIC SUMMARY (Global) ]
+--------------------------------------------------------------------
+Log Date        | Status Code  | Request Count   | Total Bytes    
+--------------------------------------------------------------------
+01/Aug/1995     | 200          | 80              | 1382055        
+01/Aug/1995     | 302          | 2               | 110            
+01/Aug/1995     | 304          | 10              | 0              
+01/Aug/1995     | 404          | 1               | 0              
+01/Jul/1995     | 200          | 180             | 4908807        
+01/Jul/1995     | 302          | 3               | 96             
+01/Jul/1995     | 304          | 12              | 0              
+02/Jul/1995     | 200          | 171             | 5143137        
+02/Jul/1995     | 302          | 5               | 425            
+02/Jul/1995     | 304          | 7               | 0              
+03/Aug/1995     | 200          | 120             | 3325514        
+03/Aug/1995     | 302          | 1               | 96             
+03/Aug/1995     | 304          | 8               | 0              
+03/Aug/1995     | 404          | 1               | 0              
+03/Jul/1995     | 200          | 246             | 7143229        
+03/Jul/1995     | 302          | 6               | 542            
+03/Jul/1995     | 304          | 14              | 0              
+04/Aug/1995     | 200          | 128             | 2268096        
+04/Aug/1995     | 302          | 1               | 110            
+04/Aug/1995     | 304          | 13              | 0              
+
+[ QUERY 2: TOP 20 REQUESTED RESOURCES (Global) ]
+--------------------------------------------------------------------------------------------
+Resource Path                            | Request Count   | Total Bytes     | Distinct Hosts 
+--------------------------------------------------------------------------------------------
+/images/NASA-logosmall.gif               | 622             | 393786          | 584            
+/images/KSC-logosmall.gif                | 463             | 477988          | 443            
+/images/USA-logosmall.gif                | 365             | 74646           | 345            
+/images/MOSAIC-logosmall.gif             | 351             | 113982          | 336            
+/images/WORLD-logosmall.gif              | 348             | 196017          | 337            
+/images/ksclogo-medium.gif               | 344             | 1830192         | 322            
+/ksc.html                                | 273             | 1787316         | 254            
+/images/launch-logo.gif                  | 205             | 325470          | 190            
+/shuttle/countdown/                      | 204             | 802867          | 199            
+/history/apollo/images/apollo-logo1...   | 193             | 200583          | 180            
+/                                        | 185             | 1113270         | 171            
+/images/ksclogosmall.gif                 | 183             | 588870          | 181            
+/shuttle/missions/missions.html          | 138             | 1058630         | 133            
+/images/launchmedium.gif                 | 122             | 1363095         | 119            
+/htbin/cdt_main.pl                       | 108             | 392185          | 91             
+/shuttle/missions/sts-69/mission-st...   | 99              | 983177          | 96             
+/shuttle/missions/sts-71/sts-71-pat...   | 88              | 988428          | 82             
+/icons/menu.xbm                          | 83              | 40579           | 83             
+/shuttle/missions/sts-70/sts-70-pat...   | 81              | 396410          | 80             
+/shuttle/missions/sts-69/sts-69-pat...   | 81              | 614308          | 80             
+
+[ QUERY 3: HOURLY ERROR ANALYSIS (Global) ]
+--------------------------------------------------------------------------------------------
+Log Date     | Hour   | Error Reqs   | Total Reqs   | Error Rate | Distinct Hosts 
+--------------------------------------------------------------------------------------------
+01/Aug/1995  | 00     | 0            | 3            | 0.0000     | 1              
+01/Aug/1995  | 01     | 0            | 2            | 0.0000     | 1              
+01/Aug/1995  | 02     | 0            | 1            | 0.0000     | 1              
+01/Aug/1995  | 03     | 1            | 5            | 0.2000     | 2              
+01/Aug/1995  | 04     | 0            | 3            | 0.0000     | 1              
+01/Aug/1995  | 05     | 0            | 3            | 0.0000     | 1              
+01/Aug/1995  | 06     | 0            | 5            | 0.0000     | 1              
+01/Aug/1995  | 07     | 0            | 4            | 0.0000     | 1              
+01/Aug/1995  | 08     | 0            | 9            | 0.0000     | 1              
+01/Aug/1995  | 09     | 0            | 7            | 0.0000     | 1              
+01/Aug/1995  | 10     | 0            | 9            | 0.0000     | 1              
+01/Aug/1995  | 11     | 0            | 11           | 0.0000     | 1              
+01/Aug/1995  | 12     | 0            | 14           | 0.0000     | 1              
+01/Aug/1995  | 13     | 0            | 10           | 0.0000     | 1              
+01/Aug/1995  | 14     | 0            | 7            | 0.0000     | 1              
+01/Jul/1995  | 00     | 0            | 8            | 0.0000     | 1              
+01/Jul/1995  | 01     | 0            | 11           | 0.0000     | 1              
+01/Jul/1995  | 02     | 0            | 6            | 0.0000     | 1              
+01/Jul/1995  | 03     | 0            | 7            | 0.0000     | 1              
+01/Jul/1995  | 04     | 0            | 3            | 0.0000     | 1              
+
+=========================================================================================
+                CROSS-PIPELINE PERFORMANCE LEADERBOARD
+=========================================================================================
+Pipeline        | Total Runs   | Fastest Runtime (ms) | Avg Runtime (ms)    
+-----------------------------------------------------------------------------------------
+MongoDB         | 1            | 628                  | 628.00              
+=========================================================================================
