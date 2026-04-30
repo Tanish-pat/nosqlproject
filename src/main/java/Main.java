@@ -100,7 +100,9 @@ public class Main {
                 long totalRecords = 0;
                 int batchId = 1;
 
-                String[] targetFiles = {"/app/data/NASA_access_log_sample"};
+                // String[] targetFiles = {"/app/data/NASA_access_log_sample"};
+                String[] targetFiles = {"/app/data/NASA_access_log_Aug95/access_log_Aug95", "/app/data/NASA_access_log_Jul95/access_log_Jul95"};
+
 
                 for (String filePath : targetFiles) {
                     try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
