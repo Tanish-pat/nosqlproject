@@ -1,0 +1,137 @@
+\documentclass[a4paper,12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{tikz}
+\usetikzlibrary{shapes,arrows,positioning}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstset{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2
+}
+
+\titleformat{\section}{\large\bfseries}{\thesection}{1em}{}[\titlerule]
+
+\begin{document}
+
+\begin{titlepage}
+    \centering
+    \vspace*{1cm}
+    \includegraphics[width=0.3\textwidth]{/Users/rutul/.gemini/antigravity/brain/772df156-5dc1-4cb5-b726-c51708ddb6bf/nasa_nosql_banner_1777816859323.png}\\[1cm]
+    {\huge \bfseries NASA Cosmic Log ETL Pipeline \\}
+    \vspace{0.5cm}
+    {\Large \bfseries Multi-Engine NoSQL Benchmarking and Reporting \\}
+    \vspace{1.5cm}
+    {\large \textbf{Course:} NoSQL Database Systems \\}
+    \vspace{1cm}
+    \begin{table}[h]
+        \centering
+        \begin{tabular}{ll}
+            \textbf{Name} & \textbf{Roll Number} \\ \midrule
+            Rutul Patel & IMT2022021 \\
+            Tanish Pathania & IMT2022049 \\
+            Mohit Naik & IMT202076 \\
+            Ananthakrishna K & IMT202206 \\
+        \end{tabular}
+    \end{table}
+    \vfill
+    {\large \today}
+\end{titlepage}
+
+\newpage
+\tableofcontents
+\newpage
+
+\section{Introduction}
+Processing massive web server logs is a cornerstone of modern data engineering. The NASA Kennedy Space Center logs provide a rich dataset of HTTP requests from 1995, representing the kind of semi-structured data that NoSQL databases were designed to handle. This project implements a unified ETL (Extract, Transform, Load) framework to parse these logs and analyze them using four different distributed computing and storage technologies.
+
+\section{Problem Statement}
+Relational databases often encounter bottlenecks when horizontal scaling is required for massive ingestion of text-based log files. The primary objective of this project is to build a pluggable architecture that can:
+\begin{itemize}
+    \item Ingest and parse complex HTTP log strings.
+    \item Perform distributed aggregations for traffic analysis, resource identification, and error rate tracking.
+    \item Compare the performance and developer experience across MongoDB, Apache Pig, Apache Hive, and MapReduce.
+\end{itemize}
+
+\section{System Architecture}
+The system follows a modular design pattern. A central Java application serves as the orchestrator, utilizing a \texttt{LogParser} to transform raw text into \texttt{NasaLogRecord} objects. These objects are then fed into specific \texttt{Pipeline} implementations.
+
+\subsection{Unified Logging \& Observability}
+To ensure a fair comparison, we implemented a centralized metadata store in \textbf{PostgreSQL}. Every execution run is assigned a unique \texttt{run\_id}, and the system tracks:
+\begin{itemize}
+    \item Ingestion time per batch.
+    \item Malformed record counts.
+    \item Query execution time for specific analytics.
+\end{itemize}
+
+\section{Implementation \& Contributions}
+Each team member was responsible for implementing one primary pipeline, ensuring end-to-end functionality from data loading to query execution.
+
+\subsection{MongoDB Pipeline - Rutul Patel}
+Rutul implemented the document-oriented path using **MongoDB 6**. This involved:
+\begin{itemize}
+    \item Mapping log records to BSON documents.
+    \item Utilizing the MongoDB Aggregation Framework for high-performance grouping.
+    \item Implementing complex queries for hourly error rates using conditional operators within the aggregation pipeline.
+\end{itemize}
+
+\subsection{Apache Pig Pipeline - Tanish Pathania}
+Tanish focused on the scripting abstraction layer for Hadoop using **Apache Pig**. Key tasks included:
+\begin{itemize}
+    \item Writing Pig Latin scripts to load TSV data.
+    \item Implementing deduplication logic for distinct host counts.
+    \item Integrating the \texttt{PigServer} library within the Java application for seamless execution.
+\end{itemize}
+
+\subsection{Apache Hive Pipeline - Mohit Naik}
+Mohit developed the SQL-on-Hadoop path using **Apache Hive**. This contribution involved:
+\begin{itemize}
+    \item Designing the Hive schema for raw log storage.
+    \item Implementing HQL (Hive Query Language) scripts for analytical queries.
+    \item Managing JDBC connections to the HiveServer2 container.
+\end{itemize}
+
+\subsection{MapReduce Pipeline - Ananthakrishna K}
+Ananthakrishna implemented the low-level distributed processing path using **Native Hadoop MapReduce**. This complex task involved:
+\begin{itemize}
+    \item Creating custom \texttt{Writable} classes for keys and values.
+    \item Implementing specific Mappers and Reducers for each of the three analytical queries.
+    \item Managing the HDFS-local file system interactions within the containerized environment.
+\end{itemize}
+
+\section{Analytics and Reporting}
+Regardless of the engine used, the system generates three key reports:
+\begin{enumerate}
+    \item \textbf{Daily Traffic Analysis}: Counts total requests and bandwidth per status code per day.
+    \item \textbf{Top Resource Utilization}: Identifies the most frequently accessed paths and bandwidth hogs.
+    \item \textbf{Error Rate Monitoring}: Tracks the percentage of 4xx and 5xx errors per hour.
+\end{enumerate}
+
+\section{Conclusion}
+The project successfully demonstrates the versatility of NoSQL systems in handling cosmic-scale log data. While MongoDB offered the most intuitive developer experience, MapReduce provided the deepest control over the distributed execution flow. The unified observability layer proved essential in benchmarking these systems accurately.
+
+\end{document}
