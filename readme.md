@@ -135,8 +135,8 @@ Check the `output/` directory or your PostgreSQL `query_metrics` table for the p
 ## 👥 Contributors
 - **Rutul Patel** (IMT2022021)
 - **Tanish Pathania** (IMT2022049)
-- **Mohit Naik** (IMT202076)
-- **Ananthakrishna K** (IMT202206)
+- **Mohit Naik** (IMT2022076)
+- **Ananthakrishna K** (IMT2022086)
 
 ---
 **Developed as part of the NoSQL Database Systems Course.** 🚀
