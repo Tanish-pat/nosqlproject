@@ -1,4 +1,4 @@
-![NASA Log Cosmic ETL](/Users/rutul/.gemini/antigravity/brain/772df156-5dc1-4cb5-b726-c51708ddb6bf/nasa_nosql_banner_1777816859323.png)
+
 
 # 🚀 NASA Cosmic Log ETL: A Multi-Engine NoSQL Benchmark
 
